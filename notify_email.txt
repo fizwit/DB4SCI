@@ -1,0 +1,31 @@
+Date: {{ sent_date }}
+Hello {{ User }},
+
+You're receiving this email because you have a database deployed on MyDB. We need to migrate all databases from the current MyDB server to a new service called DB4SCI.
+
+*Action Required:*
+Please reply to {{ supportEmail }} with one of the following:
+ - I want my database migrated to the new service
+ - My database is no longer needed and can be removed
+Your response is needed even if you're no longer actively using the database.
+
+Your data base containers are:
+{% for c in containers -%}
+    {{c}}
+{% endfor %}
+*Migration Details:*
+
+PostgreSQL databases will be upgraded to PostgreSQL 17.4
+MariaDB instances will be upgraded to MariaDB 12.0.2
+Mongo DB instances will be upgraded to Mongo 8.0.15
+
+Data will be migrated using native database backup/recover tools.
+Your passwords and port numbers will remain unchanged
+Hostname will change from mydb too db4sci
+
+*Note:*
+
+Databases not confirmed for migration will have a final backup archived for [X] months before being decommissioned we will provide specific migration dates and any downtime windows seen. After migration, you will need to update your connection strings to use the new hostname (db4sci)
+
+Please reply to {{ supportOrganization }} if you have any questions.
+Thank you,

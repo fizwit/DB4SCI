@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+    dbaas:
+        image: fredhutch/dbaas:2.0.1
+        hostname: dbaas
+        ports:
+            - "5008:5000"
+        volumes:
+            - dbaas:/data
+            - /var/run/docker.sock:/var/run/docker.sock
+        environment:
+            TZ: "America/Los_Angeles"
+            PYTHONUNBUFFERED: "1"
+            FLASK_DEBUG: ${FLASK_DEBUG}
+        labels:
+            DESCRIPTION: "MyDB DBaaS Application"
+            Contact: "$supportAdmin"
+            # Non-secret values stay as env vars
+        secrets:
+            - aws_access_key_id
+            - aws_secret_access_key
+            - flask_secret
+            - sqlalchemy_admin_uri
+            - sqlalchemy_migrate_uri
+        deploy:
+            restart_policy:
+                condition: any
+
+secrets:
+    aws_access_key_id:
+        external: true
+    aws_secret_access_key:
+        external: true
+    flask_secret:
+        external: true
+    sqlalchemy_admin_uri:
+        external: true
+    sqlalchemy_migrate_uri:
+        external: true
+
+volumes:
+    dbaas:
+        driver: local
