@@ -1,0 +1,6 @@
+# MyDB Database Backup Cron Schedule
+# Run daily backups at 2:00 AM
+0 2 * * * cd /app && /usr/local/bin/python /app/backup_all.py >> /var/log/backup_all.log 2>&1
+
+# Run weekly backups on Saturday at 3:00 AM
+0 3 * * 6 cd /app && /usr/local/bin/python /app/backup_all.py --weekly >> /var/log/backup_all.log 2>&1
