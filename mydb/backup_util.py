@@ -1,8 +1,9 @@
+import datetime
+import subprocess
 import sys
 import time
-import datetime
-from . import mydb_config
-from . import admin_db
+
+from . import admin_db, mydb_config
 
 """
 audit MyDB backups. Check MyDB Admin backup logs.
@@ -14,6 +15,190 @@ rpt = backup_util.backup_audit()
 print(rpt[1])
 
 """
+
+
+def s3_piped_backup(backup_command, s3_url, mask_password=None, env=None):
+    """Execute database backup using piped subprocess commands to S3
+
+    Uses subprocess.Popen to pipe: <backup_command> | aws s3 cp - <s3_url>
+
+    Args:
+        backup_command (str or list): Database backup command that writes to stdout
+                                      Can be a string or list of command arguments
+        s3_url (str): Full S3 URL where backup will be stored
+        mask_password (str): Optional password to mask in debug output
+        env (dict): Optional environment variables to add/override (merged with os.environ)
+
+    Returns:
+        tuple: (success: bool, message: str)
+
+    Example:
+        backup_cmd = ["mariadb-dump", "-h", "host", "-p", "password", "--all-databases"]
+        s3_url = "s3://bucket/path/to/backup.sql"
+        success, msg = s3_piped_backup(backup_cmd, s3_url, mask_password="password")
+    """
+    # Parse backup command if it's a string
+    if isinstance(backup_command, str):
+        import shlex
+
+        backup_cmd_list = shlex.split(backup_command)
+    else:
+        backup_cmd_list = backup_command
+
+    # Merge custom environment variables with current environment
+    # This ensures PATH and other critical variables are preserved
+    import os
+    process_env = os.environ.copy()
+    if env:
+        process_env.update(env)
+
+    # Build AWS S3 copy command
+    aws_cmd = ["aws", "--only-show-errors", "s3", "cp", "-", s3_url]
+
+    # Create safe command for logging
+    backup_cmd_str = (
+        " ".join(backup_cmd_list)
+        if isinstance(backup_cmd_list, list)
+        else backup_command
+    )
+    aws_cmd_str = " ".join(aws_cmd)
+    full_command = f"{backup_cmd_str} | {aws_cmd_str}"
+
+    safe_command = full_command
+    if mask_password:
+        safe_command = full_command.replace(mask_password, "********")
+
+    print(f"DEBUG backup_util.s3_piped_backup: {safe_command}")
+
+    result_msg = f"Backing up to S3: {s3_url}\n"
+    result_msg += f"Command: {safe_command}\n\n"
+
+    try:
+        # Start backup process
+        p1 = subprocess.Popen(
+            backup_cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=process_env
+        )
+
+        # Start S3 upload process, reading from backup stdout
+        p2 = subprocess.Popen(
+            aws_cmd,
+            stdin=p1.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        # Close p1 stdout to allow p1 to receive SIGPIPE if p2 exits
+        p1.stdout.close()
+
+        # Wait for completion
+        stdout, stderr = p2.communicate()
+
+        # Check return codes
+        if p2.returncode != 0 or (stderr and len(stderr) > 0):
+            error_msg = f"Error during backup (exit code {p2.returncode}):\n{stderr}\n"
+            print(f"ERROR: {error_msg}")
+            result_msg += error_msg
+            if stdout:
+                result_msg += f"stdout: {stdout}\n"
+            return (False, result_msg)
+        else:
+            result_msg += "Backup completed successfully\n"
+            if stdout:
+                result_msg += f"stdout: {stdout}\n"
+            return (True, result_msg)
+
+    except Exception as e:
+        error_msg = f"Unexpected error during backup: {e}"
+        return (False, error_msg)
+
+
+def s3_piped_restore(s3_url, restore_command, env=None, timeout=1200):
+    """Execute S3 restore using piped subprocess commands with Popen
+
+    Uses subprocess.Popen to pipe: aws s3 cp <s3_url> - | <restore_command>
+
+    Args:
+        s3_url (str): Full S3 URL to backup file
+        restore_command (str or list): Database restore command that reads from stdin
+                                       Can be a string or list of command arguments
+        env (dict): Optional environment variables to add/override (merged with os.environ)
+        timeout (int): Timeout in seconds (default 1200 = 20 minutes)
+
+    Returns:
+        tuple: (success: bool, message: str)
+
+    Example:
+        s3_url = "s3://bucket/path/to/backup.dump"
+        restore_cmd = "pg_restore -h host -p port -d dbname -U user"
+        password_env = {"PGPASSWORD": "mypassword"}
+        success, msg = s3_piped_restore(s3_url, restore_cmd, env=password_env)
+    """
+    # Build AWS S3 copy command
+    aws_cmd = ["aws", "s3", "cp", s3_url, "-"]
+    restore_cmd_list = restore_command.split()
+
+    # Merge custom environment variables with current environment
+    # This ensures PATH and other critical variables are preserved
+    import os
+    process_env = os.environ.copy()
+    if env:
+        process_env.update(env)
+
+    # Create safe command for logging
+    aws_cmd_str = " ".join(aws_cmd)
+    full_command = f"{aws_cmd_str} | {restore_command}"
+
+    print(f"DEBUG backup_util.s3_piped_restore: {restore_command}")
+    print(f"command array: {restore_cmd_list}")
+    result_msg = f"Restoring from S3: {s3_url}\n"
+    result_msg += f"Command: {full_command}\n\n"
+
+    try:
+        # Start AWS S3 copy process
+        p1 = subprocess.Popen(aws_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # Start restore process, reading from S3 copy stdout
+        p2 = subprocess.Popen(
+            restore_cmd_list,
+            env=process_env,
+            stdin=p1.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        # Close p1 stdout to allow p1 to receive SIGPIPE if p2 exits
+        p1.stdout.close()
+
+        # Wait for completion with timeout
+        stdout, stderr = p2.communicate(timeout=timeout)
+
+        # Check return codes
+        if p2.returncode != 0:
+            error_msg = f"Error during restore (exit code {p2.returncode}):\n{stderr}\n"
+            print(f"ERROR: {error_msg}")
+            result_msg += error_msg
+            if stdout:
+                result_msg += f"stdout: {stdout}\n"
+            return (False, result_msg)
+        else:
+            result_msg += "Restore completed successfully\n"
+            if stdout:
+                result_msg += f"stdout: {stdout}\n"
+            if stderr:
+                result_msg += f"warnings: {stderr}\n"
+            return (True, result_msg)
+
+    except subprocess.TimeoutExpired:
+        # Kill processes if timeout
+        p1.kill()
+        p2.kill()
+        error_msg = f"Restore timed out after {timeout} seconds.\nRestore incomplete"
+        return (False, error_msg)
+    except Exception as e:
+        error_msg = f"Unexpected error during restore: {e}"
+        return (False, error_msg)
 
 
 def get_backup_log(info, c_id):

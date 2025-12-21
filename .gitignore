@@ -26,3 +26,5 @@ mydb/compose_templates/
 mydb/dbinit_scripts/
 mydb/test_params.py
 setup.cfg
+.mydb_venv
+setup.cfg

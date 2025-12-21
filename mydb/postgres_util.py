@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -9,11 +8,10 @@ from pathlib import Path
 import psycopg
 from jinja2 import Template
 
-from mydb import migrate_db
-
 from . import (
     admin_db,
     aws_util,
+    backup_util,
     mydb_actions,
     mydb_config,
     swarm_util,
@@ -77,17 +75,6 @@ GRANT ALL PRIVILEGES ON DATABASE "{{dbname}}" TO {{dbuser}};
     return swarm_util.create_config(params, rendered_output, target_path)
 
 
-def create_compose(params):
-    """create docker compose file"""
-    with open("mydb/compose_templates/postgresql.yml") as f:
-        pg_template = f.read()
-    template = Template(pg_template)
-    rendered_ouput = template.render(params)
-    composef = open(f"mydb/compose_scripts/{params['Name']}.yml", "w")
-    composef.write(rendered_ouput)
-    composef.close()
-
-
 def pg_env(auth_meth=None) -> list:
     """create Postgres Env"""
     env = [
@@ -112,9 +99,11 @@ def build_params_postgres(info) -> dict:
     params = {}
     dbengine = info["dbengine"]
     params["dbengine"] = info["dbengine"]
-    params["image"] = mydb_config.info[dbengine]["images"][0][1]
-    params["default_port"] = mydb_config.info[dbengine]["default_port"]
-    params["service_user"] = mydb_config.info[dbengine]["service_user"]
+    config_data = mydb_config.info[dbengine]
+    params["image"] = config_data["images"][0][1]
+    params["mapped_db_vol"] = config_data["mapped_volume"]
+    params["default_port"] = config_data["default_port"]
+    params["service_user"] = config_data["service_user"]
     params["dbname"] = info["Name"]
     params["Name"] = info["Name"]
     if "POSTGRES_USER" in info:
@@ -146,6 +135,9 @@ def migrate(info):
     dbname = info["Name"]
     if swarm_util.service_exists(dbname):
         return f"Container name {dbname} already in use"
+    dump_prefix = aws_util.lastbackup_s3_prefix(dbname)
+    if dump_prefix[:5] == "Error":
+        return dump_prefix
     volume_name = f"mydb_{dbname}"
     volume_id, error = swarm_util.create_docker_volume(volume_name)
     if error:
@@ -153,22 +145,20 @@ def migrate(info):
     params = build_params_postgres(info)
     params["service_name"] = f"mydb_{dbname}"
     params["volume_name"] = volume_name
-    S3_prefix = migrate_db.lastbackup_s3_prefix(dbname)
-    # params["S3_prefix"] = S3_prefix
+    meta_data = json.dumps(params, indent=4)
+    print(f"DEBUG: postgres_util.migrate: {dbname}\n{meta_data}")
     config_ref = create_init_script(params)
     if config_ref is None:
         return "Error: creating Docker Config"
-    # create_compose(params)
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
         return f"{error} {mydb_config.supportOrganization} has been notified"
 
     params["Start Mesg"] = f"Started! Service_id: {service.id}"
     params["service_id"] = service.id
-    meta_data = json.dumps(params, indent=4)
-    print(meta_data)
+
     time.sleep(4)  #  remove "start_service" waits till service is started
-    result = pg_restore(params, params, S3_prefix)
+    result = pg_restore(params, params, dump_prefix)
     print(f"==== DEBUG: postgres_util.migrate: {dbname}\n{result}")
     return result
 
@@ -191,7 +181,7 @@ def create(params):
     if config_ref is None:
         return "Error: creating Docker Config"
 
-    config_data = mydb_config.info[params["dbengine"]]
+    config_data = mydb_config.info[dbengine]
     params["mapped_db_vol"] = config_data["mapped_volume"]
     params["default_port"] = config_data["default_port"]
     params["service_user"] = config_data["service_user"]  # 'postgres'
@@ -240,13 +230,28 @@ def backup(info, backup_type):
     s3_url = f"{aws_bucket}{prefix}{Name}.sql"
 
     # Dump postgres globals (roles, tablespaces, etc.)
-    dbpassword = f"PGPASSWORD='{mydb_config.accounts[dbengine]['admin_pass']}' "
-    command = f"pg_dumpall -g -w --lock-wait-timeout=8000 "
-    command += f"--host {mydb_config.container_host} --port {info['Port']} "
-    command += f"-U {mydb_config.accounts[dbengine]['admin']} "
-    s3_pipe = f"| aws s3 cp - {s3_url}"
+    globals_s3_url = f"{aws_bucket}{prefix}{Name}_globals.sql"
+
+    # Build pg_dumpall command for globals
+    pg_dumpall_cmd = [
+        "pg_dumpall",
+        "-g",
+        "--host",
+        mydb_config.container_host,
+        "--port",
+        str(info["Port"]),
+        "-U",
+        mydb_config.accounts[dbengine]["admin"],
+    ]
+
+    # Set PGPASSWORD environment variable for pg_dumpall
+    import os
+
+    env = os.environ.copy()
+    env["PGPASSWORD"] = mydb_config.accounts[dbengine]["admin_pass"]
 
     # Log backup start
+    command_str = " ".join(pg_dumpall_cmd)
     admin_db.backup_log(
         info["cid"],
         Name,
@@ -254,20 +259,25 @@ def backup(info, backup_type):
         backup_id,
         backup_type,
         url=s3_url,
-        command=command,
+        command=command_str,
         err_msg="",
     )
 
     message = f"\nExecuting Postgres backup to S3: {aws_bucket}\n"
-    message += f"Executing Postgres dump_all globals command: {command}\n"
-    message += f"     to: {prefix}{Name}_globals.sql\n"
-    result = subprocess.run(
-        dbpassword + command + s3_pipe, shell=True, capture_output=True, text=True
+    message += f"Backing up globals to: {prefix}{Name}_globals.sql\n"
+
+    # Use common S3 piped backup function with environment variables
+    success, msg = backup_util.s3_piped_backup(
+        pg_dumpall_cmd,
+        globals_s3_url,
+        mask_password=mydb_config.accounts[dbengine]["admin_pass"],
+        env=env,
     )
-    if result.returncode != 0:
-        message += f"Error: {result.stderr}"
+
+    if not success:
+        message += f"Error backing up globals:\n{msg}"
         return message
-    message += f"Result: {result.stdout}\n"
+    message += msg
 
     # Get list of user databases to be backed up
     conn_string = pg_connection_string(
@@ -296,30 +306,38 @@ def backup(info, backup_type):
         dbname = db[0]
         s3_dump_url = f"{aws_bucket}{prefix}{Name}_{dbname}.dump"
 
-        # Build pg_dump command that streams directly to S3
-        command = f"PGPASSWORD='{mydb_config.accounts[dbengine]['admin_pass']}' "
-        command += f"pg_dump --dbname {dbname} "
-        command += f"--lock-wait-timeout=5000 "
-        command += f"--host {mydb_config.container_host} "
-        command += f"--port {info['Port']} "
-        command += f"--username {mydb_config.accounts[dbengine]['admin']} "
-        command += f"-F c "
-        command += f"| aws s3 cp - {s3_dump_url}"
+        # Build pg_dump command
+        pg_dump_cmd = [
+            "pg_dump",
+            "--dbname",
+            dbname,
+            "--lock-wait-timeout=5000",
+            "--host",
+            mydb_config.container_host,
+            "--port",
+            str(info["Port"]),
+            "--username",
+            mydb_config.accounts[dbengine]["admin"],
+            "-F",
+            "c",
+        ]
 
-        print(f"DEBUG: backup command: {command}")
-
-        result = subprocess.run(
-            command, shell=True, capture_output=True, text=True, timeout=1800
+        # Use common S3 piped backup function with environment variables
+        success, msg = backup_util.s3_piped_backup(
+            pg_dump_cmd,
+            s3_dump_url,
+            mask_password=mydb_config.accounts[dbengine]["admin_pass"],
+            env=env,
         )
 
-        if result.returncode != 0:
+        if not success:
             message += f"\nDatabase: {dbname}\n"
-            message += f"Command: {command}\n"
-            message += f"Error: {result.stderr}\n"
+            message += f"Error: {msg}\n"
         else:
             message += (
                 f"\nDatabase: {dbname} written to: {prefix}{Name}_{dbname}.dump\n"
             )
+            message += msg
 
     admin_db.add_container_log(
         info["cid"], Name, "GUI backup", f"user: {info.get('username', 'unknown')}"
@@ -505,13 +523,12 @@ def showall(params):
 
 
 def pg_command(cmd, port, dbname):
-    """Build PostgreSQL command with PGPASSWORD"""
-    return "".join(
+    """Build PostgreSQL command"""
+    return " ".join(
         [
-            f"PGPASSWORD='{mydb_config.accounts[dbengine]['admin_pass']}' ",
-            f"{cmd} -h {mydb_config.container_host} ",
-            f"-p {port} ",
-            f"-d {dbname} ",
+            f"{cmd} -h {mydb_config.container_host}",
+            f"-p {port}",
+            "-d postgres",
             f"-U {mydb_config.accounts[dbengine]['admin']}",
         ]
     )
@@ -529,73 +546,51 @@ def pg_restore(source, dest, S3_prefix):
        error messages/warnings.
     """
     # Source backup files
-    backup_files = aws_util.list_s3_files(S3_prefix)
-    print(f"backup file list: {backup_files}")
+    backup_files = aws_util.get_files_in_s3(S3_prefix)
+    if len(backup_files) == 0:
+        return "Could not find any files to restore PostgreSQL database."
     psql_cmd = pg_command("psql", dest["Port"], dest["dbname"])
     pg_restore = pg_command("pg_restore", dest["Port"], dest["dbname"])
+    password_env = {"PGPASSWORD": mydb_config.accounts[dbengine]["admin_pass"]}
 
     # Run SQL command file
-    result_msg = ""
     SQL_file = None
     for sql_file in backup_files:
         if ".sql" == sql_file[-4:]:
             SQL_file = sql_file
     if not SQL_file:
         return "Could not find a SQL file for PostgreSQL recovery. This is bad."
-    restore_cmd = f"aws s3 cp {SQL_file} - | {psql_cmd}"
-    print(f"DEBUG: restore SQL file: {restore_cmd}")
-    base_sql = os.path.basename(SQL_file)
-    if dest.get("SQL", "yes") != "no":
-        try:
-            result = subprocess.run(
-                restore_cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 minute timeout
-            )
-            if result.returncode != 0:
-                error_msg = f"Error restoring SQL file: {result.stderr}"
-                print(error_msg)
-                return error_msg
-            result_msg += (
-                f"SQL file {base_sql} restored successfully\n{result.stdout}\n"
-            )
-        except subprocess.TimeoutExpired:
-            return "SQL file restore timed out after 300 seconds.\nRestore incomplete"
 
-        except Exception as e:
-            return f"Unexpected error restoring SQL file: {e}"
+    result_msg = f"Restoring: {dest['dbname']}"
+    if dest.get("SQL", "yes") != "no":
+        # Use common S3 piped restore function
+        success, msg = backup_util.s3_piped_restore(
+            SQL_file,
+            psql_cmd,
+            env=password_env,
+            timeout=300,  # 5 minute timeout
+        )
+        if not success:
+            return msg
+    result_msg += msg
 
     # Restore data from dump files
     for backup_file in backup_files:
         base_file = os.path.basename(backup_file)
         if ".dump" in backup_file[-5:]:
-            restore_cmd = f"aws s3 cp {backup_file} - | {pg_restore}"
-            print(f'DEBUG: restore dump file: "{restore_cmd}"')
-            try:
-                result = subprocess.run(
-                    restore_cmd,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=1800,  # 20 minute timeout for larger dumps
-                )
-                if result.returncode != 0:
-                    result_msg += f"Restoring: {base_file}\n"
-                    result_msg += f"{result.stdout}\n"
-                    result_msg += f"  Error: {result.stderr}\n"
-                    print(result_msg)
-                    print(f"cmd: {restore_cmd}")
-                else:
-                    print(f"Dump file restored successfully: {result.stdout}")
-                    result_msg += f"Dump file {base_file} restored successfully\n{result.stdout}\n"
-            except subprocess.TimeoutExpired:
-                return f"Dump file {base_file} restore timed out after 1800 seconds"
-            except Exception as e:
-                result_msg += f"Error restoring dump file: {e}\n{result.stdout}\n"
+            # Use common S3 piped restore function
+            success, msg = backup_util.s3_piped_restore(
+                backup_file,
+                pg_restore,
+                env=password_env,
+                timeout=1800,  # 20 minute timeout for larger dumps
+            )
+            if not success:
+                result_msg += f"Error restoring {base_file}:\n{msg}\n"
+            else:
+                result_msg += msg
 
-    result_msg += "Database restored completed from S3."
+    result_msg += "Database restore completed from S3."
     return result_msg
 
 
@@ -605,65 +600,41 @@ def recover_admin_db():
     So maybe change the prefix to /archive once V2 is live and copy the
     prod to /archive - Nov 2025
     """
-    pg_restore = "".join(
+    dump_prefix = aws_util.lastbackup_s3_prefix("mydb_admin")
+    if dump_prefix[:5] == "Error":
+        return f"Error: could not retrieve last backup prefix: {dump_prefix}"
+    files = aws_util.get_files_in_s3(dump_prefix)
+    if len(files) == 0:
+        return f"Error: no files found in S3 for prefix {dump_prefix}"
+    # Build pg_restore command
+    password_env = {"PGPASSWORD": mydb_config.accounts["admindb"]["v1_admin_pass"]}
+    pg_restore = " ".join(
         [
-            f"PGPASSWORD='{mydb_config.accounts['admindb']['v1_admin_pass']}' ",
-            f"pg_restore -h {mydb_config.container_host} ",
-            "-p 32008 ",
-            "-d mydb_admin ",
-            f"-U {mydb_config.accounts['admindb']['admin']}",
+            "pg_restore",
+            f"--host {mydb_config.container_host}",
+            "--port 32008",
+            "--dbname=mydb_admin",
+            f"--username={mydb_config.accounts['admindb']['admin']}",
         ]
     )
-    print(f"DEBUG: recover_admin_db: {pg_restore}")
-    prefixs = aws_util.list_s3_prefixes("mydb_admin")
-    if len(prefixs) == 0:
-        return "No S3 backups found for mydb_admin."
-    x, last_backup = prefixs[-1].split()
-    print(f"DEBUG: recover_admin_db: {aws_bucket}/prod/mydb_admin/{last_backup}")
-    aws_bucket = mydb_config.AWS_BUCKET_NAME
-    S3_prefix = f"{aws_bucket}/prod/mydb_admin/{last_backup}"
-    backup_files = aws_util.list_s3_files(S3_prefix)
-    dump_file = None
-    for backup_file in backup_files:
-        if ".dump" in backup_file[-5:]:
-            dump_file = backup_file
-            break
-    if dump_file is None:
-        return f"Could not find dump file for mydb_admin. S3 correct? {S3_prefix}"
-    base_file = os.path.basename(backup_file)
-    restore_cmd = f"aws s3 cp {backup_file} - | {pg_restore}"
-    result_msg = ""
-    try:
-        result = subprocess.run(
-            restore_cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=1200,  # 20 minute timeout for larger dumps
-        )
-        if result.returncode != 0:
-            result_msg += f"Restoring: {base_file}\n"
-            result_msg += f"{result.stdout}\n"
-            result_msg += f"  Error: {result.stderr}\n"
-        else:
-            result_msg += (
-                f"Dump file {base_file} restored successfully\n{result.stdout}\n"
+
+    # Use common S3 piped restore function
+    message = "Restoring admin_db\n"
+    for file in files:
+        if ".dump" in file:
+            success, result_msg = backup_util.s3_piped_restore(
+                file, pg_restore, env=password_env, timeout=1200
             )
-    except subprocess.TimeoutExpired:
-        return f"Dump file {base_file} restore timed out after 1200 seconds"
-    except Exception as e:
-        result_msg += f"Error restoring dump file for mydb_admin: {e}\n{result.stdout}\n{result.stderr}"
-    result_msg += "Database restored completed from S3."
-    return result_msg
+            if not success:
+                return result_msg
+            message += result_msg
+    return message
 
 
 def setup_parser():
     parser = argparse.ArgumentParser(
         description="postgres_util CLI testing",
         usage="%(prog)s [options] module_name",
-    )
-    parser.add_argument(
-        "--test-init", action="store_true", required=False, help="test SQL init script"
     )
     parser.add_argument(
         "--update-clone",
@@ -684,10 +655,13 @@ def setup_parser():
         dest="shm_size",
         help="Used with --clone option to set the shared mem size (/dev/shm), int or str, (e.g. 1G)",
     )
+    parser.add_argument(
+        "--restore_admin", action="store_true", help="Restore the Admin DB from S3"
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = setup_parser()
-    if args.test_init:
-        init_script({"dbuser": "jfdey", "dbuserpass": "jfdeytest", "dbname": "pgtest"})
+    if args.restore_admin:
+        recover_admin_db()

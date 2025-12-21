@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
     dbaas:
-        image: fredhutch/dbaas:2.0.1
+        image: ${github_org}/dbaas:2.0.1
         hostname: dbaas
         ports:
             - "5008:5000"
@@ -18,25 +18,28 @@ services:
             Contact: "$supportAdmin"
             # Non-secret values stay as env vars
         secrets:
-            - aws_access_key_id
-            - aws_secret_access_key
-            - flask_secret
-            - sqlalchemy_admin_uri
-            - sqlalchemy_migrate_uri
+            - mydb_aws_access_key_id
+            - mydb_aws_secret_access_key
+            - mydb_aws_bucket_name
+            - mydb_flask_secret
+            - mydb_sqlalchemy_admin_uri
+            - mydb_sqlalchemy_migrate_uri
         deploy:
             restart_policy:
                 condition: any
 
 secrets:
-    aws_access_key_id:
+    mydb_aws_access_key_id:
         external: true
-    aws_secret_access_key:
+    mydb_aws_secret_access_key:
         external: true
-    flask_secret:
+    mydb_aws_bucket_name:
+        external: true 
+    mydb_flask_secret:
         external: true
-    sqlalchemy_admin_uri:
+    mydb_sqlalchemy_admin_uri:
         external: true
-    sqlalchemy_migrate_uri:
+    mydb_sqlalchemy_migrate_uri:
         external: true
 
 volumes:
