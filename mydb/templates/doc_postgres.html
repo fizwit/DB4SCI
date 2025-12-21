@@ -36,21 +36,26 @@
     <code>module load PostgreSQL/17.5-GCCcore-14.2.0</code>
     <p>
 
-    <h2>Postgres Commands</h2> 
-    <code>
-      create user jdoe;<br>
-      CREATE DATABASE mybase WITH OWNER jdoe;<br>
-      grant all privileges on database mybase to myotheruser;<br>
-      ALTER USER myotheruser WITH PASSWORD 'MyPassword';<br>
-      delete database: drop database mybase;<br>
-      change db owner: alter database mybase owner to myotheruser;<br>
-      load psql with database or template: psql template1<br>
-      \l   list databases<br>
-      \dt  list tables<br>
-      \du  list users<br>
-      \d+  table name  (show table fields)<br>
-      \c   connect to different DB or show current connection <br>
-      \q   disconnect<br></code>
+    <h2>Postgres Commands</h2>
+    <pre><code>create user jdoe;
+CREATE DATABASE mybase WITH OWNER jdoe;
+grant all privileges on database mybase to myotheruser;
+ALTER USER myotheruser WITH PASSWORD 'MyPassword';
+delete database: drop database mybase;
+change db owner: alter database mybase owner to myotheruser;
+load psql with database or template: psql template1
+\l   list databases
+\dt  list tables
+\du  list users
+\d+  table name  (show table fields)
+\c   connect to different DB or show current connection
+\q   disconnect
+
+# Show scheme when users do not create a seperate db from `postgres`
+SELECT table_name FROM information_schema.tables
+WHERE table_type = 'BASE TABLE'
+AND table_schema NOT IN ('pg_catalog', 'information_schema');</code></pre>
+
 
     
   </div> <!-- end class document -->

@@ -28,27 +28,19 @@ def list_s3(Name):
     Note each prefix is PIT backup date, the backup files are
     in the PIT
     """
-    cmd = (
-        f"{mydb_config.aws} s3 ls --recursive {mydb_config.AWS_BUCKET_NAME}/prod/{Name}"
-    )
+    cmd = f"aws s3 ls --recursive {mydb_config.AWS_BUCKET_NAME}/prod/{Name}"
     print(f"DEBUG: {__file__}.selecte list_s3 cmd: {cmd}")
     backups = os.popen(cmd).read().strip()
     return backups
 
 
-def list_s3_prefixes(Name):
-    cmd = f"{mydb_config.aws} s3 ls {mydb_config.AWS_BUCKET_NAME}/prod/{Name}/"
-    backups = os.popen(cmd).read().strip()
-    lines = backups.split("\n")
-    return lines
-
-
-def lastbackup_s3_prefix(Name, target):
+def lastbackup_s3_prefix(Name):
     """Find the latest backup archive file for a container by searching AWS S3.
 
     AWS output format: "2025-01-15 14:30:00  12345678 prod/container_name/2025-01-15_14:30:00/*"
+    return a single prefix for the latest backup
     """
-    s3_cmd = f"{mydb_config.aws} s3 ls --recursive {mydb_config.AWS_BUCKET_NAME}/prod/{Name}/"
+    s3_cmd = f"aws s3 ls {mydb_config.AWS_BUCKET_NAME}/prod/{Name}/"
     command = s3_cmd.split()
     print(f"DEBUG aws_util.lastbackup_s3_prefix: cmd = {command}")
 
@@ -67,16 +59,15 @@ def lastbackup_s3_prefix(Name, target):
         p1.stdout.close()
         result = p2.communicate()
         if p2.returncode == 0:
-            for line in result[0].strip().split("\n"):
-                if line.endswith(target):
-                    prefix = line.strip().split()[3]
-            if not prefix:
-                return f"No backup found for {Name} - Looking for {target} in {s3_cmd}"
-            return prefix
+            lines = result[0].strip().split("\n")
+            if len(lines) > 0:
+                return f"/prod/{Name}/{lines[-1].split()[1]}"
+            else:
+                return "Error: lastbackup_s3_prefix: No backups found"
         else:
-            return "Error lastbackup_s3_prefix: "
+            return "Error: lastbackup_s3_prefix: "
     except subprocess.CalledProcessError as e:
-        return f"s3 error cmd: {command}\n error occurred: {e}"
+        return f"Error: with s3 cmd: {command}\n error occurred: {e}"
 
 
 def list_s3_files(s3_url):
@@ -140,23 +131,70 @@ def list_s3_files(s3_url):
         return []
 
 
+def get_files_in_s3(prefix):
+    s3_client = boto3.client("s3")
+
+    boto_bucket = mydb_config.AWS_BUCKET_NAME.replace("s3://", "").rstrip("/")
+    if prefix[0] == "/":
+        prefix = prefix[1:]
+    try:
+        response = s3_client.list_objects_v2(Bucket=boto_bucket, Prefix=prefix)
+
+        file_list = []
+        if "Contents" in response:
+            for obj in response["Contents"]:
+                # Reconstruct full S3 URL
+                file_url = f"{mydb_config.AWS_BUCKET_NAME}/{obj['Key']}"
+                file_list.append(file_url)
+
+        return file_list
+
+    except ClientError as e:
+        print(f"Error accessing S3 bucket: {e}")
+        return []
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return []
+
+
 def setup_parser():
     parser = argparse.ArgumentParser(
         description="aws_util modue test",
         usage="%(prog)s [options] module_name",
     )
     parser.add_argument(
-        "--last_backup", type=str, required=False, help="get last S3 backup object"
+        "--last_backup", type=str, required=False, help="get last S3 backup prefix"
+    )
+    parser.add_argument(
+        "--get_files",
+        type=str,
+        required=False,
+        help="return files in S3 bucker and prefix",
+    )
+    parser.add_argument(
+        "--list_s3",
+        type=str,
+        required=False,
+        help="list S3 prefixes for DB",
     )
     return parser.parse_args()
 
 
 def main():
     args = setup_parser()
+    bucket_name = os.getenv("AWS_BUCKET_NAME")
+    boto_bucket = bucket_name.replace("s3://", "").rstrip("/")
+
     if args.last_backup:
-        print(f"Testing lastbackup_s3_prefix, target: {args.last_backup}")
-        last_backup = lastbackup_s3_prefix("gecco_gizmo", args.last_backup)
-        print(f"Last backup found: {last_backup}")
+        print(f"Testing lastbackup_s3_prefix, name: {args.last_backup}")
+        prefix = lastbackup_s3_prefix(args.last_backup)
+        print(f"Last backup found: {prefix}")
+        files = get_files_in_s3(prefix)
+        print(f"Files found: {files}")
+    elif args.list_s3:
+        print(f"Testing list_s3_prefixes, name: {args.list_s3}")
+        prefixes = list_s3(bucket_name, args.list_s3)
+        print(f"Prefixes found: {prefixes}")
     else:
         print("No action specified")
 

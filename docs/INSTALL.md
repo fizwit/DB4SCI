@@ -224,6 +224,8 @@ To update the service with a new image without redeploying:
 docker service update --force --image dbaas:2.0.1 mydb_dbaas
 ```
 
+**Note:** This same process is used when updating application code. After making code changes, rebuild the image (step 5), tag and push to registry (step 5), then update the service with the new image. See the "Updating Application Code" section in [OPERATIONS.md](OPERATIONS.md) for the complete workflow.
+
 ### Debugging
 
 View environment variables in the running container:
