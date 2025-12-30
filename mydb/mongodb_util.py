@@ -1,6 +1,5 @@
 import argparse
 import json
-import subprocess
 import sys
 
 from jinja2 import Template
@@ -11,12 +10,10 @@ from pymongo.errors import (
     ServerSelectionTimeoutError,
 )
 
-from mydb import migrate_db
-
 from . import (
     admin_db,
     aws_util,
-    mydb_actions,
+    backup_util,
     mydb_config,
     swarm_util,
     touched,
@@ -171,7 +168,7 @@ def migrate(info):
     time.sleep(4)
 
     # Restore from S3
-    S3_path = aws_util.lastbackup_s3_prefix(dbname, "archive")
+    S3_path = aws_util.lastbackup_s3_prefix(dbname)
     print(f"DEBUG migrate mongodb Backup location: {S3_path}")
     result = mongo_restore(params, S3_path)
     print(f"==== DEBUG: mongodb_util.migrate: {dbname}\n{result}")
@@ -186,7 +183,7 @@ def mongo_restore(dest, s3_prefix):
 
     return str: Result message with restore status
     """
-    archive_url = f"{mydb_config.AWS_BUCKET_NAME}/{s3_prefix}"
+    archive_url = f"{mydb_config.AWS_BUCKET_NAME}/{s3_prefix}/archive"
     print(f"MongoDB restore - S3 URL: {archive_url}")
 
     # Build mongorestore command
@@ -194,45 +191,19 @@ def mongo_restore(dest, s3_prefix):
     restore_cmd += f"--password {mydb_config.accounts[dbengine]['admin_pass']} "
     restore_cmd += f"--host {mydb_config.container_host} "
     restore_cmd += f"--port {dest['Port']} "
-    restore_cmd += f"--authenticationDatabase admin "
-    restore_cmd += f"--archive "
+    restore_cmd += "--authenticationDatabase admin "
+    restore_cmd += "--archive"
 
-    # Build full command with S3 pipe
-    full_command = f"aws s3 cp {archive_url} - | {restore_cmd}"
-    print(f"DEBUG: MongoDB restore command: {full_command}")
-
-    # Safe command for logging (mask password)
-    safe_command = full_command.replace(
-        mydb_config.accounts[dbengine]["admin_pass"], "********"
+    # Use common S3 piped restore function
+    success, result_msg = backup_util.s3_piped_restore(
+        archive_url,
+        restore_cmd,
+        timeout=1800,  # 30 minute timeout for large restores
+        mask_password=mydb_config.accounts[dbengine]["admin_pass"],
     )
 
-    print(f"DEBUG: MongoDB restore command: {safe_command}")
-
-    result_msg = f"Restoring MongoDB from S3: {archive_url}\n"
-    result_msg += f"Command: {safe_command}\n\n"
-
-    try:
-        result = subprocess.run(
-            full_command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=1800,  # 30 minute timeout for large restores
-        )
-
-        if result.returncode != 0:
-            error_msg = f"Error restoring MongoDB archive:\n{result.stderr}\n"
-            print(error_msg)
-            result_msg += error_msg
-            result_msg += f"stdout: {result.stdout}\n"
-        else:
-            result_msg += f"MongoDB archive restored successfully\n"
-            result_msg += f"stdout: {result.stdout}\n"
-
-    except subprocess.TimeoutExpired:
-        return "MongoDB restore timed out after 1800 seconds.\nRestore incomplete"
-    except Exception as e:
-        return f"Unexpected error restoring MongoDB archive: {e}"
+    if not success:
+        return result_msg
 
     result_msg += "\nMongoDB database restore completed from S3."
     return result_msg
@@ -310,29 +281,60 @@ def backup(info, type):
     """
     Name = info["Name"]
     backup_id, prefix = aws_util.create_backup_prefix(Name)
-    s3_url = f"{mydb_config.AWS_BUCKET_NAME}{prefix}"
+    s3_url = f"{mydb_config.AWS_BUCKET_NAME}{prefix}archive"
 
-    command = f"mongodump --username {mydb_config.accounts[dbengine]['admin']} "
-    command += f"--password {mydb_config.accounts[dbengine]['admin_pass']} "
-    command += f"--host {mydb_config.container_host} --port {info['Port']} "
-    command += "--archive"
-    safe_command = command.replace(mydb_config.accounts[dbengine]["admin_pass"], "********")
-    s3_pipe = f"| aws s3 cp - {s3_url}"
+    # Build mongodump command
+    mongodump_cmd = [
+        "mongodump",
+        "--username",
+        mydb_config.accounts[dbengine]["admin"],
+        "--password",
+        mydb_config.accounts[dbengine]["admin_pass"],
+        "--host",
+        mydb_config.container_host,
+        "--port",
+        str(info["Port"]),
+        "--archive",
+    ]
+
+    # Log backup start
+    command_str = " ".join(mongodump_cmd)
+    safe_command = command_str.replace(
+        mydb_config.accounts[dbengine]["admin_pass"], "********"
+    )
+    admin_db.backup_log(
+        info["cid"],
+        Name,
+        "start",
+        backup_id,
+        type,
+        url=s3_url,
+        command=safe_command,
+        err_msg="",
+    )
 
     message = f"\nExecuting Mongo backup to S3: {mydb_config.AWS_BUCKET_NAME}\n"
     message += f"Executing: {safe_command}\n"
-    message += f"     to: {s3_url}archive\n"
-    admin_db.backup_log(info["cid"], Name, "start", backup_id, type, url="", command=command, err_msg="")
-    full_command = command + s3_pipe + "archive"
-    result = subprocess.run(full_command, shell=True, capture_output=True)
-    if result.returncode != 0:
+    message += f"     to: {s3_url}\n"
+
+    # Use common S3 piped backup function
+    success, msg = backup_util.s3_piped_backup(
+        mongodump_cmd,
+        s3_url,
+        mask_password=mydb_config.accounts[dbengine]["admin_pass"],
+    )
+
+    if not success:
         message += f"\nDatabase: {Name}\n"
-        message += f"Command: {command}\n"
-        message += f"Error: {result.stderr}\n"
-        message += f"Backup exit code {result.returncode}"
+        message += f"Error: {msg}\n"
     else:
-        message += f"\nDatabase: {Name} written to: {s3_url}archive\n"
-    admin_db.backup_log(info["cid"], Name, "end", backup_id, type, s3_url, command, msg)
+        message += f"\nDatabase: {Name} written to: {s3_url}\n"
+        message += msg
+
+    # Log backup end
+    admin_db.backup_log(
+        info["cid"], Name, "end", backup_id, type, s3_url, safe_command, message
+    )
     return message
 
 

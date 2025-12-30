@@ -1,7 +1,7 @@
 import datetime
+import os
 import subprocess
 import sys
-import time
 
 from . import admin_db, mydb_config
 
@@ -17,66 +17,64 @@ print(rpt[1])
 """
 
 
-def s3_piped_backup(backup_command, s3_url, mask_password=None, env=None):
+def s3_piped_backup(backup_command, s3_url, env=None):
     """Execute database backup using piped subprocess commands to S3
 
     Uses subprocess.Popen to pipe: <backup_command> | aws s3 cp - <s3_url>
 
     Args:
-        backup_command (str or list): Database backup command that writes to stdout
-                                      Can be a string or list of command arguments
+        backup_command (str): Database backup command that writes to stdout
         s3_url (str): Full S3 URL where backup will be stored
-        mask_password (str): Optional password to mask in debug output
         env (dict): Optional environment variables to add/override (merged with os.environ)
+                   For PostgreSQL, pass {"PGPASSWORD": "password"}
 
     Returns:
         tuple: (success: bool, message: str)
 
     Example:
-        backup_cmd = ["mariadb-dump", "-h", "host", "-p", "password", "--all-databases"]
-        s3_url = "s3://bucket/path/to/backup.sql"
-        success, msg = s3_piped_backup(backup_cmd, s3_url, mask_password="password")
+        # PostgreSQL - password in environment
+        backup_cmd = "pg_dump -h host -U  user  dbname"
+        env = {"PGPASSWORD": "password"}
+        success, msg = s3_piped_backup(backup_cmd, s3_url, env=env)
     """
-    # Parse backup command if it's a string
-    if isinstance(backup_command, str):
-        import shlex
+    import shlex
 
-        backup_cmd_list = shlex.split(backup_command)
-    else:
-        backup_cmd_list = backup_command
+    backup_cmd_list = shlex.split(backup_command)
 
     # Merge custom environment variables with current environment
     # This ensures PATH and other critical variables are preserved
-    import os
-    process_env = os.environ.copy()
     if env:
+        process_env = os.environ.copy()
         process_env.update(env)
+    else:
+        process_env = None
 
     # Build AWS S3 copy command
     aws_cmd = ["aws", "--only-show-errors", "s3", "cp", "-", s3_url]
 
-    # Create safe command for logging
-    backup_cmd_str = (
-        " ".join(backup_cmd_list)
-        if isinstance(backup_cmd_list, list)
-        else backup_command
-    )
+    # Create command for logging
     aws_cmd_str = " ".join(aws_cmd)
-    full_command = f"{backup_cmd_str} | {aws_cmd_str}"
+    full_command = f"{backup_command} | \\\n    {aws_cmd_str}"
+    if 'mongodump' in full_command:
+        safe_message = full_command.replace(mydb_config.accounts['MongoDB']["admin_pass"], "xxxxx")
+    if 'mariadb-dump' in full_command:
+        safe_message = full_command.replace(mydb_config.accounts['MariaDB']["admin_pass"], "xxxxx")
+    else:
+        safe_message = full_command
 
-    safe_command = full_command
-    if mask_password:
-        safe_command = full_command.replace(mask_password, "********")
 
-    print(f"DEBUG backup_util.s3_piped_backup: {safe_command}")
+    print(f"DEBUG backup_util.s3_piped_backup: {full_command} env: {env}")
 
     result_msg = f"Backing up to S3: {s3_url}\n"
-    result_msg += f"Command: {safe_command}\n\n"
+    result_msg += f"Command: {safe_message}\n\n"
 
     try:
         # Start backup process
         p1 = subprocess.Popen(
-            backup_cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=process_env
+            backup_cmd_list,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=process_env,
         )
 
         # Start S3 upload process, reading from backup stdout
@@ -91,26 +89,41 @@ def s3_piped_backup(backup_command, s3_url, mask_password=None, env=None):
         # Close p1 stdout to allow p1 to receive SIGPIPE if p2 exits
         p1.stdout.close()
 
-        # Wait for completion
+        # Wait for both processes to complete
+        # p2.communicate() waits for p2 to finish
         stdout, stderr = p2.communicate()
 
-        # Check return codes
-        if p2.returncode != 0 or (stderr and len(stderr) > 0):
-            error_msg = f"Error during backup (exit code {p2.returncode}):\n{stderr}\n"
-            print(f"ERROR: {error_msg}")
-            result_msg += error_msg
-            if stdout:
-                result_msg += f"stdout: {stdout}\n"
-            return (False, result_msg)
-        else:
-            result_msg += "Backup completed successfully\n"
-            if stdout:
-                result_msg += f"stdout: {stdout}\n"
-            return (True, result_msg)
+        # Wait for p1 to finish and get its return code
+        p1.wait()
 
     except Exception as e:
         error_msg = f"Unexpected error during backup: {e}"
         return (False, error_msg)
+
+    # Check results after processes complete
+    # Check p1 (backup command) return code first
+    if p1.returncode != 0:
+        # Read p1 stderr if available
+        p1_stderr = p1.stderr.read() if p1.stderr else ""
+        error_msg = f"Backup command failed (exit code {p1.returncode}):\n{p1_stderr}\n"
+        print(f"ERROR: {error_msg}")
+        result_msg += error_msg
+        return (False, result_msg)
+
+    # Check p2 (S3 upload) return code
+    if p2.returncode != 0 or (stderr and len(stderr) > 0):
+        error_msg = f"S3 upload failed (exit code {p2.returncode}):\n{stderr}\n"
+        print(f"ERROR: {error_msg}")
+        result_msg += error_msg
+        if stdout:
+            result_msg += f"stdout: {stdout}\n"
+        return (False, result_msg)
+
+    # Success
+    result_msg += "Backup completed successfully\n"
+    if stdout:
+        result_msg += f"stdout: {stdout}\n"
+    return (True, result_msg)
 
 
 def s3_piped_restore(s3_url, restore_command, env=None, timeout=1200):
@@ -140,10 +153,11 @@ def s3_piped_restore(s3_url, restore_command, env=None, timeout=1200):
 
     # Merge custom environment variables with current environment
     # This ensures PATH and other critical variables are preserved
-    import os
-    process_env = os.environ.copy()
     if env:
+        process_env = os.environ.copy()
         process_env.update(env)
+    else:
+        process_env = None
 
     # Create safe command for logging
     aws_cmd_str = " ".join(aws_cmd)
