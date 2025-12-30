@@ -340,7 +340,7 @@ append admin commands to URL
 /admin/containers   Display summary from containers
 /admin/data?cid=n  Display Docker inspect from AdminDB
 /admin/update?cid=n&key=value&...  Update Info with new key: values
-/admin/delete?dbname=container_name
+/admin/delete?name=container_name | /admin/delete?cid=n
 /admin/backup_audit
 /admin_mode?mode=[on|off]
 /admin/recover_admin_db Restore myd_admin from S3 to migrate_db
@@ -448,19 +448,19 @@ def admin(cmd):
             return "DEBUG: admin-update: No URL arguments"
     elif cmd == "delete":
         title = "Admin Delete Container"
-        if args["dbname"] is None:
-            body = "/admin/delete must speicify the dbname to be removed.\n"
-            body += "/admin/delete?dbname=container_name\n"
-            return render_template("dblist.html", title=title, dbheader="", dbs=body)
-        body = swarm_util.admin_kill(args["dbname"], session["username"])
-        dbheader = f"MyDB Admin Delete: Service: {args['dbname']}"
-        return render_template("dblist.html", title=title, dbheader=dbheader, dbs=body)
+        if "name" in args:
+            body = swarm_util.admin_kill(args["dbname"], session["username"])
+            dbheader = f"MyDB Admin Delete: Service: {args['dbname']}"
+            return render_template("dblist.html", title=title, dbheader=dbheader, dbs=body)
+        elif "cid" in args:
+            admin_db.delete_container_state(int(args["cid"]))
+            dbheader = f"Admin Delete: Container: {args['cid']}"
+            admin_db.add_container_log(args["cid"], "na", "deleted", dbheader)
+            return render_template("dblist.html", title="Admin Delete", dbheader=dbheader, dbs="")
     elif cmd == "recover_admin_db":
         result = postgres_util.recover_admin_db()
         title = "Restore mydb_admin from S3 to migrate_db"
-        return render_template(
-            "dblist.html", title=title, dbheader="pg_dump output", dbs=result
-        )
+        return render_template("dblist.html", title=title, dbheader="pg_dump output", dbs=result)
     elif cmd == "services":
         header, body = swarm_util.display_services()
         title = "MyDB Admin Services"

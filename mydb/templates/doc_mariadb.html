@@ -29,11 +29,13 @@
     This loads the entire MariaDB client code base.
     <code>module load MariaDB/11.8.3-GCC-14.2.0</code>
 
-    <h2>Postgres Commands</h2> 
+    <h2>MariaDB Commands</h2> 
     <code>
        SHOW DATABASES;<br>
        SHOW TABLES FROM `database_name`;<br>
        DROP DATABASE IF EXISTS bufg;<br>
+       USE mydql;
+       select user, host from user;
        \q  Disconnect.<br>
     </code>
 

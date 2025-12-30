@@ -3,7 +3,6 @@ import json
 import os
 import sys
 import time
-from pathlib import Path
 
 import psycopg
 from jinja2 import Template
@@ -12,7 +11,6 @@ from . import (
     admin_db,
     aws_util,
     backup_util,
-    mydb_actions,
     mydb_config,
     swarm_util,
     touched,
@@ -26,7 +24,7 @@ def pg_connection_string(user, password, port):
     """Create a PostgreSQL connection string to use with psycopg.connect()"""
     return "".join(
         [
-            f"host={mydb_config['host']}",
+            f"host={mydb_config.container_host}",
             f"port={port}",
             "dbname=postgres",
             f"user={user}",
@@ -97,7 +95,6 @@ def build_params_postgres(info) -> dict:
             and labels.
     """
     params = {}
-    dbengine = info["dbengine"]
     params["dbengine"] = info["dbengine"]
     config_data = mydb_config.info[dbengine]
     params["image"] = config_data["images"][0][1]
@@ -157,7 +154,7 @@ def migrate(info):
     params["Start Mesg"] = f"Started! Service_id: {service.id}"
     params["service_id"] = service.id
 
-    time.sleep(4)  #  remove "start_service" waits till service is started
+    time.sleep(4)  # remove "start_service" waits till service is started
     result = pg_restore(params, params, dump_prefix)
     print(f"==== DEBUG: postgres_util.migrate: {dbname}\n{result}")
     return result
@@ -220,38 +217,26 @@ def create(params):
 
 def backup(info, backup_type):
     """Backup all databases for a given Postgres container
-    pg_dump commands are run locally and stream directly to S3
     type: str ['User', 'Admin']
     """
     Name = info["Name"]
-    backup_id, prefix = mydb_actions.create_backup_prefix(Name)
+    backup_id, prefix = aws_util.create_backup_prefix(Name)
 
-    aws_bucket = mydb_config.AWS_BUCKET_NAME
-    s3_url = f"{aws_bucket}{prefix}{Name}.sql"
+    s3_url = f"{mydb_config.AWS_BUCKET_NAME}{prefix}"
 
     # Dump postgres globals (roles, tablespaces, etc.)
-    globals_s3_url = f"{aws_bucket}{prefix}{Name}_globals.sql"
+    globals_s3_url = f"{s3_url}{Name}_globals.sql"
 
     # Build pg_dumpall command for globals
-    pg_dumpall_cmd = [
-        "pg_dumpall",
-        "-g",
-        "--host",
-        mydb_config.container_host,
-        "--port",
-        str(info["Port"]),
-        "-U",
-        mydb_config.accounts[dbengine]["admin"],
-    ]
+    pg_dumpall_cmd = "pg_dumpall -g "
+    pg_dumpall_cmd += f"--host {mydb_config.container_host} "
+    pg_dumpall_cmd += f"--port {info['Port']} "
+    pg_dumpall_cmd += f"-U {mydb_config.accounts[dbengine]['admin']}"
 
     # Set PGPASSWORD environment variable for pg_dumpall
-    import os
-
-    env = os.environ.copy()
-    env["PGPASSWORD"] = mydb_config.accounts[dbengine]["admin_pass"]
+    env = {"PGPASSWORD": mydb_config.accounts[dbengine]["admin_pass"]}
 
     # Log backup start
-    command_str = " ".join(pg_dumpall_cmd)
     admin_db.backup_log(
         info["cid"],
         Name,
@@ -259,18 +244,17 @@ def backup(info, backup_type):
         backup_id,
         backup_type,
         url=s3_url,
-        command=command_str,
+        command=pg_dumpall_cmd,
         err_msg="",
     )
 
-    message = f"\nExecuting Postgres backup to S3: {aws_bucket}\n"
-    message += f"Backing up globals to: {prefix}{Name}_globals.sql\n"
+    message = f"\nExecuting Postgres backup to S3: {s3_url}\n"
+    message += f"Backing up globals to: {globals_s3_url}\n"
 
     # Use common S3 piped backup function with environment variables
     success, msg = backup_util.s3_piped_backup(
         pg_dumpall_cmd,
         globals_s3_url,
-        mask_password=mydb_config.accounts[dbengine]["admin_pass"],
         env=env,
     )
 
@@ -280,16 +264,16 @@ def backup(info, backup_type):
     message += msg
 
     # Get list of user databases to be backed up
-    conn_string = pg_connection_string(
-        mydb_config[dbengine].accinfo["Port"], "postgres"
-    )
     try:
-        connection = psycopg.connect(conn_string)
+        connection = psycopg.connect(host=mydb_config.container_host,
+            user=mydb_config.accounts[dbengine]["admin"],
+            password=mydb_config.accounts[dbengine]["admin_pass"],
+            port=info['Port'],
+            dbname='postgres')
     except Exception as e:
-        message = f"Error: MyDB Postgres Backup; "
-        message += f"psycopg connect: container: {Name}, "
+        message = "Error: MyDB Postgres Backup; "
+        message += f"psycopg connect: container: {Name}, Port: {info['Port']}"
         message += f"message: {e}, "
-        message += f"connect string: {conn_string}"
         print(f"ERROR: {message}")
         return message
 
@@ -304,54 +288,35 @@ def backup(info, backup_type):
     # Back up each database
     for db in dbs:
         dbname = db[0]
-        s3_dump_url = f"{aws_bucket}{prefix}{Name}_{dbname}.dump"
+        s3_dump_url = f"{s3_url}{Name}_{dbname}.dump"
 
         # Build pg_dump command
-        pg_dump_cmd = [
-            "pg_dump",
-            "--dbname",
-            dbname,
-            "--lock-wait-timeout=5000",
-            "--host",
-            mydb_config.container_host,
-            "--port",
-            str(info["Port"]),
-            "--username",
-            mydb_config.accounts[dbengine]["admin"],
-            "-F",
-            "c",
-        ]
+        pg_dump_cmd = "pg_dump "
+        pg_dump_cmd += f"--dbname {dbname} "
+        pg_dump_cmd += "--lock-wait-timeout=5000 "
+        pg_dump_cmd += f"--host {mydb_config.container_host} "
+        pg_dump_cmd += f"--port {info['Port']} "
+        pg_dump_cmd += f"--username {mydb_config.accounts[dbengine]['admin']} "
+        pg_dump_cmd += "-F c"
 
         # Use common S3 piped backup function with environment variables
-        success, msg = backup_util.s3_piped_backup(
-            pg_dump_cmd,
-            s3_dump_url,
-            mask_password=mydb_config.accounts[dbengine]["admin_pass"],
-            env=env,
-        )
+        success, msg = backup_util.s3_piped_backup(pg_dump_cmd, s3_dump_url, env=env)
 
         if not success:
             message += f"\nDatabase: {dbname}\n"
             message += f"Error: {msg}\n"
         else:
-            message += (
-                f"\nDatabase: {dbname} written to: {prefix}{Name}_{dbname}.dump\n"
-            )
+            message += f"\nDatabase: {dbname} written to: {s3_dump_url}\n"
             message += msg
 
-    admin_db.add_container_log(
-        info["cid"], Name, "GUI backup", f"user: {info.get('username', 'unknown')}"
-    )
-
-    url = f"{aws_bucket}{prefix}"
     admin_db.backup_log(
         info["cid"],
         Name,
         "end",
         backup_id,
         backup_type,
-        url=url,
-        command=command,
+        url=s3_url,
+        command=pg_dump_cmd,
         err_msg=message,
     )
 
@@ -375,7 +340,7 @@ def pg_audit(Info):
     """
     report = []
     report.append("=" * 80)
-    report.append(f"PostgreSQL Audit Report")
+    report.append("PostgreSQL Audit Report")
     report.append(f"Container: {Info.get('Name', 'unknown')}")
     report.append(f"Host: {mydb_config.container_host}")
     report.append(f"Port: {Info['Port']}")
@@ -563,12 +528,8 @@ def pg_restore(source, dest, S3_prefix):
 
     result_msg = f"Restoring: {dest['dbname']}"
     if dest.get("SQL", "yes") != "no":
-        # Use common S3 piped restore function
         success, msg = backup_util.s3_piped_restore(
-            SQL_file,
-            psql_cmd,
-            env=password_env,
-            timeout=300,  # 5 minute timeout
+            SQL_file, psql_cmd, env=password_env, timeout=300
         )
         if not success:
             return msg
@@ -578,12 +539,8 @@ def pg_restore(source, dest, S3_prefix):
     for backup_file in backup_files:
         base_file = os.path.basename(backup_file)
         if ".dump" in backup_file[-5:]:
-            # Use common S3 piped restore function
             success, msg = backup_util.s3_piped_restore(
-                backup_file,
-                pg_restore,
-                env=password_env,
-                timeout=1800,  # 20 minute timeout for larger dumps
+                backup_file, pg_restore, env=password_env, timeout=1800
             )
             if not success:
                 result_msg += f"Error restoring {base_file}:\n{msg}\n"

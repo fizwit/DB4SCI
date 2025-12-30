@@ -1,10 +1,8 @@
 import json
 import os
-import subprocess
 import time
 
 import mariadb
-from docker.types import ConfigReference
 from jinja2 import Template
 
 from mydb import migrate_db
@@ -12,6 +10,7 @@ from mydb import migrate_db
 from . import (
     admin_db,
     aws_util,
+    backup_util,
     mydb_actions,
     mydb_config,
     swarm_util,
@@ -234,10 +233,12 @@ def build_params_mariadb(info) -> dict:
         dict: Service configuration parameters
     """
     params = {}
-    params["dbengine"] = info["dbengine"]
-    params["image"] = mydb_config.info[dbengine]["images"][0][1]
-    params["default_port"] = mydb_config.info[dbengine]["default_port"]
-    params["service_user"] = mydb_config.info[dbengine]["service_user"]
+    params["dbengine"] = dbengine
+    config_data = mydb_config.info[dbengine]
+    params["image"] = config_data["images"][0][1]
+    params["mapped_db_vol"] = config_data["mapped_volume"]
+    params["default_port"] = config_data["default_port"]
+    params["service_user"] = config_data["service_user"]
     params["dbname"] = info["Name"]
     params["Name"] = info["Name"]
 
@@ -361,14 +362,10 @@ def create(params):
 
     res = "Your MariaDB database server has been created. Use the following command "
     res += "to connect from the Linux command line.\n\n"
-    res += f"mariadb -h {mydb_config.container_host} "
+    res += f"mariadb --host {mydb_config.container_host} "
     res += f"-P {params['Port']} -D {params['dbname']} "
     res += f"-u {params['dbuser']} -p\n\n"
     res += "You will be prompted to enter your password.\n\n"
-    res += "Alternatively, you can use the mariadb client:\n"
-    res += f"mariadb -h {mydb_config.container_host} "
-    res += f"-P {params['Port']} -D {params['dbname']} "
-    res += f"-u {params['dbuser']} -p\n\n"
 
     message = (
         f"MyDB created a new {dbengine} database called: {params['service_name']}\n"
@@ -383,33 +380,27 @@ def backup(info, backup_type):
     mariadb-dump is run from the dbaas container and piped to S3
     """
     Name = info["Name"]
-    backup_id, prefix = mydb_actions.create_backup_prefix(Name)
+    backup_id, prefix = aws_util.create_backup_prefix(Name)
 
-    aws_bucket = mydb_config.AWS_BUCKET_NAME
-    s3_url = f"{aws_bucket}{prefix}{Name}.sql"
+    s3_url = f"{mydb_config.AWS_BUCKET_NAME}{prefix}"
 
-    s3_filename = s3_url + "/dump_" + backup_id + ".sql"
+    s3_filename = s3_url + f"{Name}_{backup_id}.sql"
 
     # MariaDB Dump to S3 Backups
-    command = [
-        "mariadb-dump",
-        "-h",
-        f"{mydb_config.container_host}",
-        "-P",
-        f"{info['Port']}",
-        "-u",
-        "root",
-        f"-p{mydb_config.accounts[dbengine]['admin_pass']}",
-        "--single-transaction",
-        "--all-databases",
-    ]
+    # Note: MariaDB password must be passed via -p flag (no space between -p and password)
+    command = "mariadb-dump "
+    command += f"--host={mydb_config.container_host} "
+    command += f"-P {info['Port']} "
+    command += "-u root "
+    command += f"-p{mydb_config.accounts[dbengine]['admin_pass']} "
+    command += "--single-transaction "
+    command += "--all-databases"
 
-    s3_cmd = ["aws", "--only-show-errors", "s3", "cp", "-", s3_url]
-
-    command_str = " ".join(command)
-    safe_command = command_str.replace(
-        mydb_config.accounts[dbengine]["admin_pass"], "xxxxx"
+    # Create safe command for logging (mask password)
+    safe_command = command.replace(
+        mydb_config.accounts[dbengine]["admin_pass"], "********"
     )
+
     # Log backup start
     admin_db.backup_log(
         info["cid"],
@@ -422,47 +413,27 @@ def backup(info, backup_type):
         err_msg="",
     )
 
-    print(f"DEBUG: mariadb-dump command: {safe_command}")
-    print(f"DEBUG: mariadb-dump AWS cmd: {s3_cmd}")
+    # Use common S3 piped backup function
+    # MariaDB doesn't need environment variables - password is in command
+    message = f"\nExecuting MariaDB backup to S3: {s3_url}\n"
 
-    try:
-        p1 = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        p2 = subprocess.Popen(
-            s3_cmd,
-            stdin=p1.stdout,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        p1.stdout.close()  # Allow p1 to receive SIGPIPE if p2 exits
-        (processed, err) = p2.communicate()
+    success, msg = backup_util.s3_piped_backup(command, s3_filename)
+    if not success:
+        send_mail("MyDB: MariaDB backup error", message, mydb_config.supportAdmin)
 
-        if p2.returncode != 0 or (err and len(err) > 0):
-            message = f"MariaDB Backup error. Container: {Name}\n"
-            message += f"Error message: {err.decode() if err else 'Unknown error'}\n"
-            print(message)
-            send_mail("MyDB: MariaDB backup error", message, mydb_config.supportAdmin)
-        else:
-            message = "\nExecuted MariaDB dump command:\n    "
-            message += safe_command
-            message += f"\nDump file: {s3_url}\n\n"
-            message += "Backup completed successfully.\n"
-    except Exception as e:
-        message = f"MariaDB Backup exception. Container: {Name}\n"
-        message += f"Exception: {str(e)}\n"
-        print(f"DEBUG: mariadb_util.backup Error: {message}")
-        send_mail("MyDB: MariaDB backup exception", message, mydb_config.supportAdmin)
+    # Log backup end
     admin_db.backup_log(
         info["cid"],
         Name,
         "end",
         backup_id,
         backup_type,
-        url=s3_filename,
-        command=safe_command,
-        err_msg=message,
+        url=s3_url,
+        command=command,
+        err_msg="",
     )
 
-    return message
+    return message + msg
 
 
 def wait_for_mariadb(port, timeout=60):
@@ -533,44 +504,24 @@ def mariadb_restore(source, dest, S3_prefix):
 
     # Build restore command
     # Don't specify a database - the dump file contains CREATE DATABASE statements
-    maria_cmd = f"mariadb -h {mydb_config.container_host} "
+    # Note: MariaDB password must be passed via -p flag (no space between -p and password)
+    maria_cmd = f"mariadb --host {mydb_config.container_host} "
     maria_cmd += f"-P {dest['Port']} "
     maria_cmd += f"-u {mydb_config.accounts[dbengine]['admin']} "
     maria_cmd += f"-p{mydb_config.accounts[dbengine]['admin_pass']}"
 
-    restore_cmd = f"aws s3 cp {SQL_file} - | {maria_cmd}"
-    print(
-        f"DEBUG: restore SQL file: {restore_cmd.replace(mydb_config.accounts[dbengine]['admin_pass'], 'xxxxx')}"
+    # Use common S3 piped restore function
+    # MariaDB doesn't need environment variables - password is in command
+    success, msg = backup_util.s3_piped_restore(
+        SQL_file,
+        maria_cmd,
+        timeout=1800,  # 30 minute timeout
     )
 
-    base_sql = os.path.basename(SQL_file)
-
-    try:
-        result = subprocess.run(
-            restore_cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=1800,  # 30 minute timeout
-        )
-        if result.returncode != 0:
-            error_msg = f"Error restoring SQL file: {result.stderr}"
-            print(f"ERROR: {error_msg}")
-            if result.stdout:
-                print(f"STDOUT: {result.stdout}")
-            result_msg += error_msg
-            result_msg += f"\nSTDOUT: {result.stdout}\n" if result.stdout else ""
-        else:
-            result_msg += f"SQL file {base_sql} restored successfully\n"
-            if result.stdout:
-                result_msg += f"{result.stdout}\n"
-            if result.stderr:
-                result_msg += f"Warnings: {result.stderr}\n"
-
-    except subprocess.TimeoutExpired:
-        return "SQL file restore timed out after 1800 seconds.\nRestore incomplete"
-    except Exception as e:
-        return f"Unexpected error restoring SQL file: {e}"
+    if not success:
+        result_msg += f"Error restoring {SQL_file}:\n{msg}\n"
+    else:
+        result_msg += msg
 
     result_msg += "Database restore completed from S3."
     print(f"DEBUG: maria_retore: result: {result_msg}")

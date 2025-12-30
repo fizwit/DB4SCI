@@ -18,7 +18,7 @@ def create_backup_prefix(Name):
     """
     t = time.localtime()
     backup_id = f"{t[0]}-{t[1]:02d}-{t[2]:02d}_{t[3]:02d}:{t[4]:02d}:{t[5]:02d}"
-    prefix = f"/mydb/{Name}/{backup_id}/"
+    prefix = f"/{mydb_config.s3_prefix_backup}/{Name}/{backup_id}/"
 
     return backup_id, prefix
 

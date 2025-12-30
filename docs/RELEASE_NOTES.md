@@ -17,6 +17,8 @@
   - `touched` meta field. Users need to `touch` there containers to keep them from
     being de-commisioned. 
   - For local development: Install all required Python deps with venv -> .mydb_venv
+  - remove passwords from docker images, remove passwords from logs, remove passwords from
+    display messages and error messages. `safe_message` variable 
 
 #### Postgres update Version 2.0.1
   - POSTGRES_DB is defined by the user, POSTRES_USER, POSTGRES_PASSWORD are defined by the application
