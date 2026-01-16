@@ -34,7 +34,7 @@
          <li><a href='#'>Admin</a>
             <ul> 
               <li><a href="{{ url_for('admin', cmd='help') }}">Admin Help</a></li>
-              <li><a href="{{ url_for('admin', cmd='debug') }}">Show Session Info</a></li>
+              <li><a href="{{ url_for('admin', cmd='session_info') }}">Show Session Info</a></li>
               <li><a href="{{ url_for('select_container', dbaction='restore') }}">Restore From S3 Backup</a></li>
               <li><a href="{{ url_for('select_container', dbaction='admin_metadata') }}">Service Meta Data</a></li>
               <li><a href="{{ url_for('select_container', dbaction='audit_db') }}">Audit DB</a></li>
@@ -42,16 +42,17 @@
               <li><a href="{{ url_for('admin', cmd='backup_audit') }}">Backup Audit</a></li>
               <li><a href="{{ url_for('admin', cmd='services') }}">List Docker Services</a></li>
               <li><a href="{{ url_for('admin', cmd='volume_list') }}">List Docker Volumes</a></li>
-              <li><a href="{{ url_for('select_container', dbaction='delete') }}">Remove Service</a></li>
+              <li><a href="{{ url_for('select_container', dbaction='admin_delete') }}">Remove Service</a></li>
             </ul>
          </li><!-- end 'Admin' -->
          <li><a href='#'>Migrate</a>
             <ul> 
               <li><a href="{{ url_for('list_from_migrate') }}">List Containers from MigrateDB</a></li>
+              <li><a href="{{ url_for('select_container', dbaction='migrate_list_s3') }}">List S3 Backups</a></li>
               <li><a href="{{ url_for('select_container', dbaction='migrate_info') }}">Show Containers Meta Data</a></li>
               <li><a href="{{ url_for('migrate_email') }}">Create Email List</a></li>
               <li><a href="{{ url_for('select_container', dbaction='migrate') }}">Migrate Container</a></li>
-              <li><a href="{{ url_for('migrate_recover') }}">Recover Admin DB to Migrate DB</a></li>
+              <li><a href="{{ url_for('migrate_restore') }}">Restore Admin DB to Migrate DB</a></li>
  
             </ul>
          </li><!-- end 'Migrate' -->

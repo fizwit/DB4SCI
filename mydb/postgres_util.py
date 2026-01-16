@@ -33,6 +33,22 @@ def pg_connection_string(user, password, port):
     )
 
 
+def pg_admin_connect(dbname, port):
+    """Connect to PostgreSQL as admin user"""
+    try:
+        conn = psycopg.connect(
+            host=mydb_config.container_host,
+            user=mydb_config.accounts[dbengine]["admin"],
+            password=mydb_config.accounts[dbengine]["admin_pass"],
+            port=port,
+            dbname="postgres",
+        )
+    except psycopg.Error as e:
+        print(f"Error pg_admin_connect: connecting to PostgreSQL: {e}")
+        return None
+    return conn
+
+
 def auth_check(dbuser, dbuserpass, port):
     """Connect to Postgres with users credentinals to
     validate that they have access
@@ -70,7 +86,24 @@ GRANT ALL PRIVILEGES ON DATABASE "{{dbname}}" TO {{dbuser}};
     rendered_output = template.render(params)
     params["config_name"] = f"mydb_{params['Name']}_init.sql"
     target_path = "/docker-entrypoint-initdb.d/init.sql"
-    return swarm_util.create_config(params, rendered_output, target_path)
+    config_ref = swarm_util.create_config(params, rendered_output, target_path)
+    return config_ref
+
+
+def wait_for_postgres(dbname, port):
+    """Wait for PostgreSQL to be ready"""
+    start_time = time.time()
+    timeout = 60
+    time.sleep(4)
+    while (time.time() - start_time) < timeout:
+        conn = pg_admin_connect(dbname, port)
+        if conn is None:
+            time.sleep(2)
+        else:
+            conn.close()
+            return True
+    print(f"PostgreSQL db: {dbname} is not ready!", file=sys.stderr)
+    return False
 
 
 def pg_env(auth_meth=None) -> list:
@@ -78,7 +111,7 @@ def pg_env(auth_meth=None) -> list:
     env = [
         f"POSTGRES_USER={mydb_config.accounts[dbengine]['admin']}",
         f"POSTGRES_PASSWORD={mydb_config.accounts[dbengine]['admin_pass']}",
-        "POSTGRES_DB=postgres",
+        f"POSTGRES_DB={mydb_config.accounts[dbengine]['admin']}",
     ]
     if auth_meth == "md5":
         env.append("POSTGRES_INITDB_ARGS=--auth-host=md5")
@@ -132,7 +165,7 @@ def migrate(info):
     dbname = info["Name"]
     if swarm_util.service_exists(dbname):
         return f"Container name {dbname} already in use"
-    dump_prefix = aws_util.lastbackup_s3_prefix(dbname)
+    dump_prefix = aws_util.lastbackup_s3_prefix(dbname, mydb_config.s3_prefix_migrate)
     if dump_prefix[:5] == "Error":
         return dump_prefix
     volume_name = f"mydb_{dbname}"
@@ -142,19 +175,16 @@ def migrate(info):
     params = build_params_postgres(info)
     params["service_name"] = f"mydb_{dbname}"
     params["volume_name"] = volume_name
-    meta_data = json.dumps(params, indent=4)
-    print(f"DEBUG: postgres_util.migrate: {dbname}\n{meta_data}")
+    # meta_data = json.dumps(params, indent=4)
+    # print(f"DEBUG: postgres_util.migrate: {dbname}\nMeta data for container recovery: {meta_data}")
     config_ref = create_init_script(params)
     if config_ref is None:
         return "Error: creating Docker Config"
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
         return f"{error} {mydb_config.supportOrganization} has been notified"
-
-    params["Start Mesg"] = f"Started! Service_id: {service.id}"
     params["service_id"] = service.id
-
-    time.sleep(4)  # remove "start_service" waits till service is started
+    wait_for_postgres(dbname, params["Port"])
     result = pg_restore(params, params, dump_prefix)
     print(f"==== DEBUG: postgres_util.migrate: {dbname}\n{result}")
     return result
@@ -184,13 +214,14 @@ def create(params):
     params["service_user"] = config_data["service_user"]  # 'postgres'
     params["Port"] = admin_db.get_max_port()
     params["env"] = pg_env()
+    del params["dbuserpass"]
     params["labels"] = {}
     for label in mydb_config.mydb_v1_meta_data:
         params["labels"][label] = params[label]
     params["labels"]["touched"] = touched.create_date_string()
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
-        return f"{error} {mydb_config.supportOrganization} has been notified"
+        return f"{error} Unable to create your DB service {mydb_config.supportOrganization} has been notified"
     res = "Your database server has been created. Use the following command "
     res += "to connect from the Linux command line.\n\n"
     res += f"psql -h {mydb_config.container_host} "
@@ -265,11 +296,13 @@ def backup(info, backup_type):
 
     # Get list of user databases to be backed up
     try:
-        connection = psycopg.connect(host=mydb_config.container_host,
+        connection = psycopg.connect(
+            host=mydb_config.container_host,
             user=mydb_config.accounts[dbengine]["admin"],
             password=mydb_config.accounts[dbengine]["admin_pass"],
-            port=info['Port'],
-            dbname='postgres')
+            port=info["Port"],
+            dbname="postgres",
+        )
     except Exception as e:
         message = "Error: MyDB Postgres Backup; "
         message += f"psycopg connect: container: {Name}, Port: {info['Port']}"
@@ -347,121 +380,89 @@ def pg_audit(Info):
     report.append("=" * 80)
     report.append("")
 
-    try:
-        # Connect to postgres database to get system info
-        conn_string = pg_connection_string(
-            mydb_config.accounts[dbengine]["user"],
-            mydb_config.accounts[dbengine]["password"],
-            Info["Port"],
-        )
-        conn = psycopg.connect(conn_string)
-        cur = conn.cursor()
+    # Connect to postgres database to get system info
+    conn = pg_admin_connect("postgres", Info["Port"])
+    cur = conn.cursor()
 
-        # 1. List all users/roles
-        report.append("USERS AND ROLES:")
-        report.append("-" * 80)
-        cur.execute("""
-            SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolcanlogin
-            FROM pg_roles
-            ORDER BY rolname
-        """)
-        users = cur.fetchall()
+    # 1. List all users/roles
+    report.append("USERS AND ROLES:")
+    report.append("-" * 80)
+    cur.execute("""
+        SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolcanlogin
+        FROM pg_roles
+        ORDER BY rolname
+    """)
+    users = cur.fetchall()
+    report.append(
+        f"{'Role Name':<30} {'Superuser':<12} {'CreateDB':<10} {'CreateRole':<12} {'CanLogin':<10}"
+    )
+    report.append("-" * 80)
+    for user in users:
+        rolname, rolsuper, rolcreatedb, rolcreaterole, rolcanlogin = user
         report.append(
-            f"{'Role Name':<30} {'Superuser':<12} {'CreateDB':<10} {'CreateRole':<12} {'CanLogin':<10}"
+            f"{rolname:<30} {str(rolsuper):<12} {str(rolcreatedb):<10} {str(rolcreaterole):<12} {str(rolcanlogin):<10}"
         )
-        report.append("-" * 80)
-        for user in users:
-            rolname, rolsuper, rolcreatedb, rolcreaterole, rolcanlogin = user
-            report.append(
-                f"{rolname:<30} {str(rolsuper):<12} {str(rolcreatedb):<10} {str(rolcreaterole):<12} {str(rolcanlogin):<10}"
-            )
-        report.append("")
+    report.append("")
 
-        # 2. List all databases (exclude system databases)
-        report.append("DATABASES:")
+    # 2. List all databases (exclude system databases)
+    report.append("DATABASES:")
+    report.append("-" * 80)
+    cur.execute("""
+        SELECT datname
+        FROM pg_database
+        WHERE datname NOT IN ('template0', 'template1', 'postgres')
+        AND datistemplate = false
+        ORDER BY datname
+    """)
+    databases = cur.fetchall()
+    if not databases:
+        report.append("No user databases found.")
+        report.append("")
+    databases.insert(0, ("postgres",))
+    for db_row in databases:
+        dbname = db_row[0]
+        report.append(f"\nDatabase: {dbname}")
         report.append("-" * 80)
+        if dbname != "postgres":
+            conn = pg_admin_connect(dbname, Info["Port"])
+            cur = conn.cursor()
+
+        # 3. List all tables in this database
         cur.execute("""
-            SELECT datname
-            FROM pg_database
-            WHERE datname NOT IN ('template0', 'template1', 'postgres')
-            AND datistemplate = false
-            ORDER BY datname
+            SELECT schemaname, tablename
+            FROM pg_tables
+            WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY schemaname, tablename
         """)
-        databases = cur.fetchall()
+        tables = cur.fetchall()
 
-        if not databases:
-            report.append("No user databases found.")
-            report.append("")
+        if not tables:
+            report.append(f"  No user tables found in database '{dbname}'")
         else:
-            for db_row in databases:
-                dbname = db_row[0]
-                report.append(f"\nDatabase: {dbname}")
-                report.append("-" * 80)
+            report.append(f"{'Schema':<30} {'Table':<40} {'Row Count':<15}")
+            report.append("-" * 80)
 
-                # Close current connection and connect to the specific database
-                cur.close()
-                conn.close()
+            # 4. Get row count for each table
+            for table_row in tables:
+                schemaname, tablename = table_row
+                try:
+                    # Use count(*) to get row count
+                    count_query = f'SELECT COUNT(*) FROM "{schemaname}"."{tablename}"'
+                    cur.execute(count_query)
+                    row_count = cur.fetchone()[0]
+                    report.append(f"{schemaname:<30} {tablename:<40} {row_count:<15,}")
+                except Exception as e:
+                    report.append(
+                        f"{schemaname:<30} {tablename:<40} {'ERROR: ' + str(e):<15}"
+                    )
 
-                connect = pg_connection_string(
-                    mydb_config.accounts[dbengine]["user"],
-                    mydb_config.accounts[dbengine]["password"],
-                    Info["Port"],
-                )
-                db_conn = psycopg.connect(connect)
-                db_cur = db_conn.cursor()
+        cur.close()
+        conn.close()
 
-                # 3. List all tables in this database
-                db_cur.execute("""
-                    SELECT schemaname, tablename
-                    FROM pg_tables
-                    WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
-                    ORDER BY schemaname, tablename
-                """)
-                tables = db_cur.fetchall()
-
-                if not tables:
-                    report.append(f"  No user tables found in database '{dbname}'")
-                else:
-                    report.append(f"{'Schema':<30} {'Table':<40} {'Row Count':<15}")
-                    report.append("-" * 80)
-
-                    # 4. Get row count for each table
-                    for table_row in tables:
-                        schemaname, tablename = table_row
-                        try:
-                            # Use count(*) to get row count
-                            count_query = (
-                                f'SELECT COUNT(*) FROM "{schemaname}"."{tablename}"'
-                            )
-                            db_cur.execute(count_query)
-                            row_count = db_cur.fetchone()[0]
-                            report.append(
-                                f"{schemaname:<30} {tablename:<40} {row_count:<15,}"
-                            )
-                        except Exception as e:
-                            report.append(
-                                f"{schemaname:<30} {tablename:<40} {'ERROR: ' + str(e):<15}"
-                            )
-
-                db_cur.close()
-                db_conn.close()
-
-                # Reconnect to postgres database for next iteration
-                if db_row != databases[-1]:  # If not the last database
-                    conn = psycopg.connect(conn_string)
-                    cur = conn.cursor()
-
-        report.append("")
-        report.append("=" * 80)
-        report.append("Audit Complete")
-        report.append("=" * 80)
-
-    except Exception as e:
-        error_msg = f"ERROR: pg_audit failed: {e}"
-        print(error_msg)
-        report.append("")
-        report.append(error_msg)
-        return "\n".join(report)
+    report.append("")
+    report.append("=" * 80)
+    report.append("Audit Complete")
+    report.append("=" * 80)
 
     return "\n".join(report)
 
@@ -489,11 +490,17 @@ def showall(params):
 
 def pg_command(cmd, port, dbname):
     """Build PostgreSQL command"""
+    if cmd == 'pg_dump':
+        db_connection = f"-d {dbname}"
+    elif cmd == 'pg_restore':
+        db_connection = f"-d {dbname}"
+    else:
+        db_connection = "-d postgres"
     return " ".join(
         [
             f"{cmd} -h {mydb_config.container_host}",
             f"-p {port}",
-            "-d postgres",
+            db_connection,
             f"-U {mydb_config.accounts[dbengine]['admin']}",
         ]
     )
@@ -510,12 +517,20 @@ def pg_restore(source, dest, S3_prefix):
        the messages.  pg_dump restore never works without some kind of
        error messages/warnings.
     """
+    # Create the database
+    # psql -h sc-build-02 -p 32271 -U pgdba -d postgres -c "CREATE DATABASE \"bcr-trac\";"
+
     # Source backup files
     backup_files = aws_util.get_files_in_s3(S3_prefix)
     if len(backup_files) == 0:
         return "Could not find any files to restore PostgreSQL database."
-    psql_cmd = pg_command("psql", dest["Port"], dest["dbname"])
-    pg_restore = pg_command("pg_restore", dest["Port"], dest["dbname"])
+    # psql_cmd = pg_command("psql", dest["Port"], dest["dbname"])
+    psql_cmd = (f"psql --host {mydb_config.container_host} "
+        f"--port {dest['Port']} "
+        f"-d template1 -U {mydb_config.accounts[dbengine]['admin']}")
+    pg_restore = (f"pg_restore --host {mydb_config.container_host} "
+        f"--port {dest['Port']} "
+        f"-U {mydb_config.accounts[dbengine]['admin']} -C --file")
     password_env = {"PGPASSWORD": mydb_config.accounts[dbengine]["admin_pass"]}
 
     # Run SQL command file
@@ -524,12 +539,12 @@ def pg_restore(source, dest, S3_prefix):
         if ".sql" == sql_file[-4:]:
             SQL_file = sql_file
     if not SQL_file:
-        return "Could not find a SQL file for PostgreSQL recovery. This is bad."
+        return "Could not find a SQL file for PostgreSQL restore. This is bad."
 
     result_msg = f"Restoring: {dest['dbname']}"
     if dest.get("SQL", "yes") != "no":
         success, msg = backup_util.s3_piped_restore(
-            SQL_file, psql_cmd, env=password_env, timeout=300
+            SQL_file, psql_cmd, env=password_env
         )
         if not success:
             return msg
@@ -539,9 +554,7 @@ def pg_restore(source, dest, S3_prefix):
     for backup_file in backup_files:
         base_file = os.path.basename(backup_file)
         if ".dump" in backup_file[-5:]:
-            success, msg = backup_util.s3_piped_restore(
-                backup_file, pg_restore, env=password_env, timeout=1800
-            )
+            success, msg = backup_util.s3_file_restore(backup_file, pg_restore, env=password_env)
             if not success:
                 result_msg += f"Error restoring {base_file}:\n{msg}\n"
             else:
@@ -551,13 +564,15 @@ def pg_restore(source, dest, S3_prefix):
     return result_msg
 
 
-def recover_admin_db():
+def restore_admin_db():
     """grab the backup of mydb_admin from S3 in '/prod' prefix.
     Once Version 2 goes live the version 1 DBs will need to be archived.
     So maybe change the prefix to /archive once V2 is live and copy the
     prod to /archive - Nov 2025
     """
-    dump_prefix = aws_util.lastbackup_s3_prefix("mydb_admin")
+    dump_prefix = aws_util.lastbackup_s3_prefix(
+        "mydb_admin", mydb_config.s3_prefix_migrate
+    )
     if dump_prefix[:5] == "Error":
         return f"Error: could not retrieve last backup prefix: {dump_prefix}"
     files = aws_util.get_files_in_s3(dump_prefix)
@@ -580,7 +595,7 @@ def recover_admin_db():
     for file in files:
         if ".dump" in file:
             success, result_msg = backup_util.s3_piped_restore(
-                file, pg_restore, env=password_env, timeout=1200
+                file, pg_restore, env=password_env
             )
             if not success:
                 return result_msg
@@ -621,4 +636,4 @@ def setup_parser():
 if __name__ == "__main__":
     args = setup_parser()
     if args.restore_admin:
-        recover_admin_db()
+        restore_admin_db()

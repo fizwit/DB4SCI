@@ -86,9 +86,10 @@ def login():
 
         if auth == "Good":
             # Store user data in session
+            session.permanent = True
+            session["logged_in"] = True
             for user_key in info.keys():
                 session[user_key] = info[user_key]
-            session["logged_in"] = True
             if username in mydb_config.admins:
                 session["admin_user"] = True
             else:
@@ -123,15 +124,15 @@ def migrate_email():
     )
 
 
-@app.route("/migrate_recover")
+@app.route("/migrate_restore")
 @auth_required
 @admin_required
-def migrate_recover():
-    body = postgres_util.recover_admin_db()
+def migrate_restore():
+    body = postgres_util.restore_admin_db()
     return render_template(
         "action_result.html",
         result=body,
-        title="Recover Admin_DB from S3 to MigrateDB",
+        title="Restore Admin_DB from S3 to MigrateDB",
         header="This is the header",
     )
 
@@ -171,10 +172,8 @@ def created():
         result = postgres_util.create(params)
     elif params["dbengine"] == "MongoDB":
         result = mongodb_util.create_mongodb(params)
-    elif params["dbengine"] == "Neo4j":
-        result = neo4j_util.create(params)
     elif params["dbengine"] == "MariaDB":
-        result = mariadb_util.create_mariadb(params)
+        result = mariadb_util.create(params)
     else:
         result = "Error: file=postgres_view, def=created(), "
         result += 'message="dbengine not set in general_form.html"'
@@ -182,14 +181,14 @@ def created():
     return render_template("created.html", **params)
 
 
-migrate_actions = ["migrate", "migrate_info", "migrate_backuplog"]
+migrate_actions = ["migrate", "migrate_info", "migrate_list_s3", "migrate_backuplog"]
 admin_actions = [
     "list_s3",
     "backup",
     "admin_metadata",
     "audit_db",
     "audit_mysql",
-    "delete",
+    "admin_delete",
     "restore",
     "connection",
     "services",
@@ -214,16 +213,25 @@ def select_container():
         title = "View S3 Backups"
     elif action == "backup":
         title = "Backup Container Database"
+    elif action == "restore":
+        title = "Select Container to Restore from S3 Backup"
     elif action == "admin_metadata":
         title = "Select Container to get MetaData"
     elif action in ["audit_db"]:
         title = "Select Container to Audit"
     elif action in migrate_actions:
         title = "Select Container from MigrateDB"
+    elif action == "admin_delete":
+        title = "Select Container to Delete"
     else:
         title = "Select Service"
     return render_template(
-        "select_container.html", dbaction=action, title=title, items=container_names
+        "select_item.html",
+        dbaction=action,
+        title=title,
+        header="Select Container Name",
+        placeholder="Container Name",
+        items=container_names,
     )
 
 
@@ -241,7 +249,7 @@ def selected():
             header=f"Backup Results for {container_name}",
         )
     elif action == "list_s3":
-        backups = aws_util.list_s3(container_name)
+        backups = aws_util.list_s3(container_name, mydb_config.s3_prefix_prod)
         return render_template(
             "action_result.html",
             result=backups,
@@ -254,8 +262,41 @@ def selected():
         return render_template(
             "action_result.html",
             result=json_data,
-            title=f"MigrateDB Data",
+            title="MigrateDB Data",
             header=f"Meta data for {container_name}",
+        )
+    elif action == "restore":
+        session["restore_from"] = container_name
+        backup_prefixes = aws_util.parse_s3_backup_list(container_name, mydb_config.s3_prefix_prod)
+        return render_template(
+            "select_item.html",
+            title="Select a S3 Backup",
+            header="Select S3 Backup Prefix",
+            placeholder="S3 backup prefix",
+            items=backup_prefixes,
+            dbaction="s3_select",
+        )
+    elif action == "s3_select":
+        s3_url = request.args["container_name"]
+        session["s3_url"] = s3_url
+        print(f"DEBUG: restore s3_url: {s3_url}")
+        container_names = admin_db.list_container_names()
+        return render_template(
+            "select_item.html",
+            dbaction="restore_to",
+            title="Select Target Container for Restore",
+            header="Select Target Container",
+            placeholder="Container Name",
+            items=container_names,
+        )
+    elif action == "restore_to":
+        target_container = request.args["container_name"]
+        result = mydb_actions.restore(target_container, session["s3_url"])
+        return render_template(
+            "action_result.html",
+            title="Restore Completed",
+            header=f"Restored {session['restore_from']} to {target_container}\n from {session['s3_url']}",
+            result=result,
         )
     elif action in admin_actions:
         return mydb_actions.admin_actions(action, request.args)
@@ -285,6 +326,7 @@ def select_with_auth():
 
 
 @app.route("/selected_auth/", methods=["POST"])
+@auth_required
 def selected_auth():
     args = {}
     for arg_key in request.args.keys():
@@ -313,8 +355,9 @@ def selected_auth():
         )
 
 
-@auth_required
 @app.route("/list_from_migrate/")
+@auth_required
+@admin_required
 def list_from_migrate():
     (header, body) = migrate_db.display_active_containers()
     return render_template(
@@ -327,7 +370,7 @@ def admin_help():
 MyDB administrators must be added to mydb_config.admins.
 append admin commands to URL
 /admin/help/   Your reading it.
-/admin/debug Display session variables
+/admin/session_info Display session variables
 /admin/email_list Create JSON output of all users grouped by email
 /admin/state/  Display all records in State table
 /admin/list Display running containers
@@ -340,10 +383,9 @@ append admin commands to URL
 /admin/containers   Display summary from containers
 /admin/data?cid=n  Display Docker inspect from AdminDB
 /admin/update?cid=n&key=value&...  Update Info with new key: values
-/admin/delete?name=container_name | /admin/delete?cid=n
 /admin/backup_audit
 /admin_mode?mode=[on|off]
-/admin/recover_admin_db Restore myd_admin from S3 to migrate_db
+/admin/restoer_admin_db Restore myd_admin from S3 to migrate_db
 URL encoding tips:  Space: %20, @: %40"""
 
     return body
@@ -361,12 +403,12 @@ def admin(cmd):
         body = admin_help()
         title = "MyDB Administrative Features\n"
         return render_template("dblist.html", title=title, dbheader="", dbs=body)
-    elif cmd == "debug":
-        return render_template("debug.html", title="Session Variables")
+    elif cmd == "session_info":
+        return render_template("session.html", title="Session Variables")
     elif cmd == "restore":
         container_names = migrate_db.list_container_names()
         return render_template(
-            "restore.html", title="Recover Database from Backup", items=container_names
+            "restore.html", title="Restore Database from Backup", items=container_names
         )
     elif cmd == "email_list":
         (header, body) = admin_db.display_email_list()
@@ -394,7 +436,10 @@ def admin(cmd):
         else:
             body = "Hmm, I need a container name to inspect."
         return render_template(
-            "dblist.html", title=f"Docker Inspect for {con_name}", dbheader="", dbs=body
+            "dblist.html",
+            title=f"Docker Inspect for {args['name']}",
+            dbheader="",
+            dbs=body,
         )
     elif cmd == "volume_list":
         header, body = swarm_util.display_volume_list()
@@ -446,21 +491,12 @@ def admin(cmd):
             return "Updated Info\n" + json.dumps(info, indent=4)
         else:
             return "DEBUG: admin-update: No URL arguments"
-    elif cmd == "delete":
-        title = "Admin Delete Container"
-        if "name" in args:
-            body = swarm_util.admin_kill(args["dbname"], session["username"])
-            dbheader = f"MyDB Admin Delete: Service: {args['dbname']}"
-            return render_template("dblist.html", title=title, dbheader=dbheader, dbs=body)
-        elif "cid" in args:
-            admin_db.delete_container_state(int(args["cid"]))
-            dbheader = f"Admin Delete: Container: {args['cid']}"
-            admin_db.add_container_log(args["cid"], "na", "deleted", dbheader)
-            return render_template("dblist.html", title="Admin Delete", dbheader=dbheader, dbs="")
-    elif cmd == "recover_admin_db":
-        result = postgres_util.recover_admin_db()
+    elif cmd == "restore_admin_db":
+        result = postgres_util.restore_admin_db()
         title = "Restore mydb_admin from S3 to migrate_db"
-        return render_template("dblist.html", title=title, dbheader="pg_dump output", dbs=result)
+        return render_template(
+            "dblist.html", title=title, dbheader="pg_dump output", dbs=result
+        )
     elif cmd == "services":
         header, body = swarm_util.display_services()
         title = "MyDB Admin Services"
@@ -473,6 +509,7 @@ def admin(cmd):
 @auth_required
 def admin_mode():
     if "mode" in request.args:
+        title = "MyDB Admin Mode"
         if request.args["mode"] is None:
             body = "/admin/admin_mode must speicify the mode to be set.\n"
             body += "/admin/admin_mode?mode=[on|off]\n"
@@ -486,10 +523,8 @@ def admin_mode():
         elif request.args["mode"] == "off":
             session["admin_user"] = False
         body = f"Admin Mode = {session['admin_user']}"
-        dbheader = f"MyDB Admin Mode"
-        return render_template(
-            "dblist.html", title="Admin Mode", dbheader=dbheader, dbs=body
-        )
+        dbheader = f"Set MyDB Admin Mode"
+        return render_template("dblist.html", title=title, dbheader=dbheader, dbs=body)
     return render_template("admin_mode.html")
 
 

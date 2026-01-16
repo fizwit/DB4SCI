@@ -1,11 +1,14 @@
 from flask import Flask, g
 import os
+from datetime import timedelta
 
 # Create app instance at module level
 app = Flask(__name__)
 
 # Configure the app immediately
 app.secret_key = os.environ.get("FLASK_SECRET", "default_secret_key")
+# Session expires after N minutes of inactivity
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=120)
 
 # Initialize admin databases
 from . import admin_db

@@ -315,12 +315,6 @@ def get_container_data(con_name, c_id=None):
         ).all()
     if isinstance(result, list) and len(result) > 0:
         retrieved_data = result[0].data
-        print(
-            f"DEBUG: {__file__}.get_container_data retrieved keys: {retrieved_data.keys()}"
-        )
-        print(
-            f"DEBUG: {__file__}.get_container_data 'Info' in retrieved: {'Info' in retrieved_data}"
-        )
         if "Info" not in retrieved_data:
             print(
                 f"WARNING: 'Info' key missing from data for c_id={result[0].id}, name={con_name}"
@@ -542,6 +536,17 @@ def backup_log(c_id, name, state, backup_id, backup_type, url, command, err_msg)
     db_session.add(u)
     db_session.commit()
     db_session.refresh(u)
+
+
+def get_lastbackup_from_log(name):
+    """Query backup log for the most recent backup for a container"""
+    result = (
+        Backups.query.filter(Backups.name == name).order_by(desc(Backups.ts)).first()
+    )
+    if result:
+        return result.url
+    else:
+        return f"No backup found for container: {name}"
 
 
 def backup_lastlog(c_id, tail=None):

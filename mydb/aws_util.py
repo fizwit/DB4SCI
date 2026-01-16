@@ -13,8 +13,6 @@ def create_backup_prefix(Name):
     Returns: (backup_id, prefix)
     backup_id format: YYYY-MM-DD_HH:MM:SS
     prefix format: /Name/YYYY-MM-DD_HH:MM:SS/
-    V1 used '/prod/` for prefix
-    V2 use '/mydb/` for prefix
     """
     t = time.localtime()
     backup_id = f"{t[0]}-{t[1]:02d}-{t[2]:02d}_{t[3]:02d}:{t[4]:02d}:{t[5]:02d}"
@@ -23,24 +21,77 @@ def create_backup_prefix(Name):
     return backup_id, prefix
 
 
-def list_s3(Name):
+def list_s3(Name, prefix):
     """return list of backup prefixes for a container.
     Note each prefix is PIT backup date, the backup files are
     in the PIT
     """
-    cmd = f"aws s3 ls --recursive {mydb_config.AWS_BUCKET_NAME}/prod/{Name}"
+    cmd = f"aws s3 ls --recursive {mydb_config.AWS_BUCKET_NAME}/{prefix}/{Name}"
     print(f"DEBUG: {__file__}.selecte list_s3 cmd: {cmd}")
     backups = os.popen(cmd).read().strip()
     return backups
 
 
-def lastbackup_s3_prefix(Name):
+def parse_s3_backup_list(Name, prefix):
+    """Parse S3 backup list to extract unique backup prefixes (directories)
+
+    Takes raw AWS S3 ls output and extracts unique directory paths,
+    which represent different backup timestamps.
+
+    Args:
+        Name (str): Container name to list backups for
+
+    Returns:
+        list: List of S3 backup prefixes sorted by date (newest first)
+              Example: ['/prod/container/2025-01-15_14:30:00', '/prod/container/2025-01-14_10:20:00']
+
+    AWS S3 ls output format:
+        "2025-01-15 14:30:00  12345678 prod/container_name/2025-01-15_14:30:00/file.sql"
+    """
+    # Get raw S3 listing output
+    backups_raw = list_s3(Name, prefix)
+
+    backup_prefixes = []
+
+    if backups_raw:
+        lines = backups_raw.strip().split("\n")
+        seen_prefixes = set()
+
+        for line in lines:
+            if line.strip():
+                # Split line and get the file path (last column)
+                parts = line.split()
+                if len(parts) >= 4:
+                    # Get the full S3 path (everything after date, time, size)
+                    s3_path = " ".join(parts[3:])
+
+                    # Extract directory prefix (everything before the last /)
+                    if "/" in s3_path:
+                        prefix = "/".join(s3_path.split("/")[:-1])
+                        if prefix not in seen_prefixes:
+                            seen_prefixes.add(prefix)
+                            # Format as /prefix for consistency
+                            if not prefix.startswith("/"):
+                                prefix = "/" + prefix
+                            backup_prefixes.append(prefix)
+
+        # Sort by date (newest first)
+        backup_prefixes.sort(reverse=True)
+
+    print(f"DEBUG parse_s3_backup_list: Found {len(backup_prefixes)} backup prefixes for {Name}")
+    print(f"DEBUG parse_s3_backup_list: Prefixes: {backup_prefixes}")
+
+    return backup_prefixes
+
+
+def lastbackup_s3_prefix(Name, prefix):
     """Find the latest backup archive file for a container by searching AWS S3.
 
     AWS output format: "2025-01-15 14:30:00  12345678 prod/container_name/2025-01-15_14:30:00/*"
     return a single prefix for the latest backup
+    prefix prefix can change depending on the environment ["mydb", "prod", "mydb-dev]
     """
-    s3_cmd = f"aws s3 ls {mydb_config.AWS_BUCKET_NAME}/prod/{Name}/"
+    s3_cmd = f"aws s3 ls {mydb_config.AWS_BUCKET_NAME}/{prefix}/{Name}/"
     command = s3_cmd.split()
     print(f"DEBUG aws_util.lastbackup_s3_prefix: cmd = {command}")
 
@@ -131,6 +182,47 @@ def list_s3_files(s3_url):
         return []
 
 
+def save_s3_obj(s3_url, filename):
+    """Download an S3 object and save it to /tmp directory.
+
+    Args:
+        s3_url (str): Full S3 URL to the object
+                     Example: "s3://bucket-name/prefix/path/file.sql"
+        filename (str): Name to use for the local file (saved in /tmp)
+                       Example: "backup.sql"
+    """
+    # Remove 's3://' prefix
+    path = s3_url[5:]
+
+    # Split into bucket and key
+    parts = path.split("/", 1)
+    bucket_name = parts[0]
+    if len(parts) < 2:
+        return (False, f"Invalid S3 URL - no object key specified: {s3_url}")
+
+    object_key = parts[1]
+
+    # Construct local file path
+    local_path = os.path.join("/tmp", filename)
+
+    # Create boto3 S3 client
+    s3_client = boto3.client("s3")
+
+    try:
+        # Download the file
+        s3_client.download_file(bucket_name, object_key, local_path)
+        return (True, local_path)
+
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        if error_code == "404" or error_code == "NoSuchKey":
+            return (False, f"S3 object not found: {s3_url}")
+        else:
+            return (False, f"S3 error downloading {s3_url}: {e}")
+    except Exception as e:
+        return (False, f"Unexpected error downloading {s3_url}: {e}")
+
+
 def get_files_in_s3(prefix):
     s3_client = boto3.client("s3")
 
@@ -187,9 +279,9 @@ def main():
 
     if args.last_backup:
         print(f"Testing lastbackup_s3_prefix, name: {args.last_backup}")
-        prefix = lastbackup_s3_prefix(args.last_backup)
-        print(f"Last backup found: {prefix}")
-        files = get_files_in_s3(prefix)
+        s3_path = lastbackup_s3_prefix(args.last_backup, prefix="prod")
+        print(f"Last backup found: {s3_path}")
+        files = get_files_in_s3(s3_path)
         print(f"Files found: {files}")
     elif args.list_s3:
         print(f"Testing list_s3_prefixes, name: {args.list_s3}")

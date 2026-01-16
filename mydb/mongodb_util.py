@@ -168,7 +168,7 @@ def migrate(info):
     time.sleep(4)
 
     # Restore from S3
-    S3_path = aws_util.lastbackup_s3_prefix(dbname)
+    S3_path = aws_util.lastbackup_s3_prefix(dbname, mydb_config.s3_prefix_migrate)
     print(f"DEBUG migrate mongodb Backup location: {S3_path}")
     result = mongo_restore(params, S3_path)
     print(f"==== DEBUG: mongodb_util.migrate: {dbname}\n{result}")
