@@ -14,7 +14,7 @@
 
       <h2>User Backup and Recover</h2>
       Users can perform backups for specific tasks like migrations or
-      upgrades. Backups can be written to local storage.  We recomend using <kbd>/fh/scratch</kbd>
+      upgrades. Backups can be written to local storage.  We recomend using <kbd>scratch file system</kbd>
       for storing backups.
       
       <p>The backup examples assume that you are using .pgpass file to store your
@@ -27,7 +27,7 @@
       pg_dump -h mydb -p 320xx -d mydb_admin -U myrootuser -f mydb_backup_today.sql
       </code>
     
-      <p>Recover saved backup to a new database.<code>
+      <p>Restore saved backup to a new database.<code>
       psql -h mydb --port=320xx -d recoverdb -U myrootuser -f mydb_backup_today.sql 
       </code>
 
@@ -36,9 +36,9 @@
 
       <p>MyDB creates a single Postgres container with a default database which has the same name. Additional databases can
       be created within the Postgres instance. If you want to choose an alternative database 
-      name for the recovery; create a new database on the recovery Postgres DB.
+      name for the restore; create a new database Postgres DB.
       <code>psql -h mydb -p 32034 -d db_name -U myrootuser -c "CREATE DATABASE recoverdb;"</code>
-      Make a new entry in the .pgpass file for each "database".  To recover from an existing database into the
+      Make a new entry in the .pgpass file for each "database".  To restore from an existing database into the
       alternative database; just change the connection string.
       <code>pg_dump -h mydb -p 320xx -d db_name -U myrootuser | psql -h mydb --port=32034 -d recoverdb -U rootuser</code>
       

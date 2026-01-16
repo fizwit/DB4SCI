@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% block title %} Select Something {% endblock %}
+{% block title %} Select Item {% endblock %}
 {% block head %} {{ super() }}{% endblock %}
 {% block content %}
 <div id="container">
@@ -10,9 +10,9 @@
     <form method="GET", action="{{ url_for('selected') }}">
       <br>
       <br>
-      <label for="container">Select Container Name</label>
-      <input type="text" list="container_list" name="container_name" placeholder="Container Name">
-      <datalist id="container_list"> 
+      <label for="container">{{ header if header else "Select an item" }}</label>
+      <input type="text" list="item_list" name="container_name" placeholder="{{ placeholder if placeholder else 'Select from list' }}">
+      <datalist id="item_list">
         {% for o in items %}
         <option value="{{ o }}">
         {% endfor %}

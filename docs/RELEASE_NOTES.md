@@ -6,7 +6,7 @@
   - Use Docker Swam API replace docker_util.py with swarm_util.py
   - docker stack deploy
   - Implement Migrate feature. Migrate databases from one platform to a new
-    platform. Meta data is recovered from S3 backups and moved to the new
+    platform. Meta data is restored from S3 backups and moved to the new
     platform. 
   - Update container deployments using entry points to create user accounts.
   - Switch to Docker volumes, configs, and secrets.
@@ -19,6 +19,10 @@
   - For local development: Install all required Python deps with venv -> .mydb_venv
   - remove passwords from docker images, remove passwords from logs, remove passwords from
     display messages and error messages. `safe_message` variable 
+
+#### TODO
+  - Database restore is based on what is currently in the "active" state. It could be possible to
+    restore data for a container that was removed, before the backup purge cycle.
 
 #### Postgres update Version 2.0.1
   - POSTGRES_DB is defined by the user, POSTRES_USER, POSTGRES_PASSWORD are defined by the application

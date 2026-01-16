@@ -49,7 +49,10 @@ load psql with database or template: psql template1
 \du  list users
 \d+  table name  (show table fields)
 \c   connect to different DB or show current connection
+select current_database();
 \q   disconnect
+
+select datname from pg_database;
 
 # Show scheme when users do not create a seperate db from `postgres`
 SELECT table_name FROM information_schema.tables

@@ -1,16 +1,17 @@
 import json
-from .format_fill import format_fill
-from sqlalchemy import create_engine
+
+from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import scoped_session, sessionmaker
-from sqlalchemy import desc
+
 from . import mydb_config
-from .human import human_uptime
 
 # Import Base from admin_db (where models are registered)
 from .admin_db import Base
+from .format_fill import format_fill
+from .human import human_uptime
 
 # Import models - they'll be queried through our session
-from .models import Containers, ContainerState, Backups
+from .models import Backups, Containers, ContainerState
 
 # Create migrate engine
 MIGRATE_URI = mydb_config.SQLALCHEMY_MIGRATE_URI
@@ -312,7 +313,7 @@ def backup_lastlog(c_id, tail=None):
     return result
 
 
-def lastbackup_s3_prefix(name):
+def get_lastbackup_from_log(name):
     """Query backup log for the most recent backup for a container"""
     if not db_session:
         return "Migrate database not configured."

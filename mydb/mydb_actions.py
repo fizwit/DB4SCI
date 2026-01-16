@@ -2,6 +2,7 @@ from flask import render_template, session
 
 from . import (
     admin_db,
+    aws_util,
     mariadb_util,
     migrate_db,
     mongodb_util,
@@ -18,7 +19,8 @@ def admin_actions(action, args):
     if "Error:" == dbengine[:6]:
         result = dbengine
         header = "Service not found"
-    elif action == "audit_db":
+
+    if action == "audit_db":
         header = f"Audit report for {container_name}"
         if dbengine == "Postgres":
             result = postgres_util.pg_audit(info)
@@ -26,13 +28,7 @@ def admin_actions(action, args):
             result = mariadb_util.mariadb_audit(info)
         else:
             result = f"Audit not implemented for {dbengine}."
-    elif action == "restore":
-        header = "Restore Output"
-        if dbengine == "MariaDB":
-            result = mariadb_util.restore(info)
-        else:
-            result = f"Restore not implemented for {dbengine}."
-    elif action == "delete":
+    elif action == "admin_delete":
         result = swarm_util.admin_delete(container_name, session["username"])
         header = "Remove Service"
     elif action == "connection":
@@ -67,6 +63,20 @@ def connection_cmd(dbengine, info):
         return "not implemented"
 
 
+def restore(restore_to, s3_url):
+    """Restore a database from an S3 URL
+    restore_to is the name of the container to restore to
+    """
+    dbengine, info = container_info(restore_to, "admin")
+    if dbengine == "Postgres":
+        result = postgres_util.restore(info, s3_url)
+    elif dbengine == "MariaDB":
+        result = mariadb_util.restore_ui(info, s3_url)
+    else:
+        result = f"Restore not implemented for {dbengine}"
+    return result
+
+
 def migrate_actions(action, args):
     """Called from mydb_views after `Select` actions on Migrate DB"""
     container_name = args["container_name"]
@@ -96,6 +106,14 @@ def migrate_actions(action, args):
             result=json_data,
             title="Container Metadata",
             header=f"Meta data for {container_name}",
+        )
+    elif action == "migrate_list_s3":
+        backups = aws_util.list_s3(container_name, mydb_config.s3_prefix_migrate)
+        return render_template(
+            "action_result.html",
+            result=backups,
+            title=f"S3 Backup Objects from Migrate prefix: {mydb_config.s3_prefix_migrate}",
+            header=container_name + " S3 Backup Objects",
         )
     elif action == "migrate_backuplog":
         state_info = migrate_db.get_container_state(container_name)
