@@ -26,5 +26,9 @@ services:
         condition: any
 
 volumes:
-   migrate_db:
-     driver: local
+  migrate_db:
+    driver: ${SWARM_DRIVER}
+    driver_opts:
+      type: ${SWARM_TYPE}
+      o: ${SWARM_OPTS}
+      device: "${SWARM_DEVICE}/migrate_db"

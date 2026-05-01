@@ -6,7 +6,7 @@ services:
       - admin_db:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: ${MYDB_ADMIN_USER}
-      POSTGRES_PASSWORD: '${MYDB_ADMIN_PASSWORD}'
+      POSTGRES_PASSWORD: "${MYDB_ADMIN_PASSWORD}"
       POSTGRES_DB: 'mydb_admin'
     labels:
       'BACKUP_FREQ': 'Daily'
@@ -25,5 +25,9 @@ services:
         condition: any
 
 volumes:
-   admin_db:
-     driver: local
+  admin_db:
+    driver: ${SWARM_DRIVER}
+    driver_opts:
+      type: ${SWARM_TYPE}
+      o: ${SWARM_OPTS}
+      device: "${SWARM_DEVICE}/admin_db"

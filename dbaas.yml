@@ -9,39 +9,31 @@ services:
         volumes:
             - dbaas:/data
             - /var/run/docker.sock:/var/run/docker.sock
+        env_file:
+            - .env
         environment:
             TZ: "America/Los_Angeles"
             PYTHONUNBUFFERED: "1"
             FLASK_DEBUG: ${FLASK_DEBUG}
+            FLASK_SECRET: "${FLASK_SECRET}"
+            AWS_BUCKET_NAME: "${AWS_BUCKET_NAME}"
+            AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+            AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+            AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}" 
+            SQLALCHEMY_ADMIN_URI: "${SQLALCHEMY_ADMIN_URI}"
+            SQLALCHEMY_MIGRATE_URI: "${SQLALCHEMY_MIGRATE_URI}"
         labels:
-            DESCRIPTION: "MyDB DBaaS Application"
-            Contact: "$supportAdmin"
-            # Non-secret values stay as env vars
-        secrets:
-            - mydb_aws_access_key_id
-            - mydb_aws_secret_access_key
-            - mydb_aws_bucket_name
-            - mydb_flask_secret
-            - mydb_sqlalchemy_admin_uri
-            - mydb_sqlalchemy_migrate_uri
+            - "org.fredhutch.app.owner=jfdey@fredhutch.org"
+            - "org.fredhutch.description=MyDB DBaaS Application"
+            - "org.fredhutch.github.repo=db4sci"
         deploy:
-            restart_policy:
-                condition: any
-
-secrets:
-    mydb_aws_access_key_id:
-        external: true
-    mydb_aws_secret_access_key:
-        external: true
-    mydb_aws_bucket_name:
-        external: true 
-    mydb_flask_secret:
-        external: true
-    mydb_sqlalchemy_admin_uri:
-        external: true
-    mydb_sqlalchemy_migrate_uri:
-        external: true
+            #restart_policy: {}
+            #    condition: unless-stopped 
 
 volumes:
     dbaas:
-        driver: local
+        driver: ${SWARM_DRIVER}
+        driver_opts:
+            type: ${SWARM_DRIVER_TYPE}
+            o: ${SWARM_OPTS}
+            device: "${SWARM_DEVICE}/admin_db"

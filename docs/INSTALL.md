@@ -78,21 +78,8 @@ Edit `.env` and set:
 - `MAIL_TO` - Email recipients for notifications
 - Active Directory configuration (if applicable)
 
-### 2. Create Docker Secrets
 
-Create Docker Swarm secrets from your `.env` file:
-
-```bash
-./dbaas_secrets.sh
-```
-
-This script creates secrets for:
-- Flask secret key
-- Database connection strings
-- AWS credentials
-- Email configuration
-
-### 3. Customize Branding (Optional)
+### 2. Customize Branding (Optional)
 
 Customize MyDB with your organization's contact information and optionally replace the default DB4Sci logo with your own branding.
 
@@ -141,7 +128,7 @@ cp your-favicon.ico mydb/static/favicon.ico
 
 Favicon requirements: `.ico` format, 16x16 or 32x32 pixels
 
-### 4. Prepare Docker Compose Configuration
+### 3. Prepare Docker Compose Configuration
 
 Generate the resolved Docker Compose file with environment variables:
 
@@ -151,7 +138,7 @@ envsubst < dbaas.yml > dbaas_resolved.yml
 
 Review `dbaas_resolved.yml` to ensure all variables are correctly substituted.
 
-### 5. Build the MyDB Container
+### 4. Build the MyDB Container
 
 Build the Docker image:
 
