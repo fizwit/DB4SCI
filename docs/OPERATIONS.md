@@ -358,6 +358,15 @@ docker exec -it $(docker ps -q -f name=mydb_<container_name>) \
   mongosh --username root --authenticationDatabase admin
 ```
 
+# Connect to the admin databases
+```
+source .env
+PGPASSWORD="${MYDB_ADMIN_PASSWORD}"  psql --host sc-build-02 --port 32009 -d mydb_admin -U $MYDB_ADMIN_USER
+
+# Migrate DB
+PGPASSWORD="${MYDB_MIGRATE_PASSWORD}"  psql --host sc-build-02 --port 32008 -d mydb_admin -U $MYDB_ADMIN_USER
+```
+
 ### Get Shell Access to a Container
 
 ```bash
