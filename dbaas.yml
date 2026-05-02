@@ -26,9 +26,6 @@ services:
             - "org.fredhutch.app.owner=jfdey@fredhutch.org"
             - "org.fredhutch.description=MyDB DBaaS Application"
             - "org.fredhutch.github.repo=db4sci"
-        deploy:
-            #restart_policy: {}
-            #    condition: unless-stopped 
 
 volumes:
     dbaas:
