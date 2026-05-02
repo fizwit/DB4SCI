@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block title %} Documentation- {% endblock %}
+{% block head %} {{ super() }}{% endblock %}
+{% block content %}
+<div id="container">
+  <div class="title">
+    <h4>{{title}}</h4>
+  </div>
+  <div class="document">
+    <H3>Display Name:  {{ session.get('displayName', 'no name') }}</H3>
+    <h3>username: {{ session.get('username', 'username not set') }}</h3>
+    <h3>Manager: {{ session.get('manager', 'N/A') }}</h3>
+    <h3>Department: {{ session.get('department', 'N/A') }}</h3>
+    <h3>Login Status: {{ session.get('logged_in', 'logged_in not set!') }}</h3>
+    <h3>eMail: {{ session.get('mail', 'No email') }}</h3>
+    <h3>Admin User: {{ session.get('admin_user', 'Not set') }}</h3>
+  </div>
+</div>
+{% endblock %}
