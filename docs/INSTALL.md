@@ -128,17 +128,7 @@ cp your-favicon.ico mydb/static/favicon.ico
 
 Favicon requirements: `.ico` format, 16x16 or 32x32 pixels
 
-### 3. Prepare Docker Compose Configuration
-
-Generate the resolved Docker Compose file with environment variables:
-
-```bash
-envsubst < dbaas.yml > dbaas_resolved.yml
-```
-
-Review `dbaas_resolved.yml` to ensure all variables are correctly substituted.
-
-### 4. Build the MyDB Container
+### 3. Build the MyDB Container
 
 Build the Docker image:
 
@@ -148,7 +138,7 @@ Build the Docker image:
 
 This creates the `dbaas:2.0.1` image with all dependencies.
 
-### 5. Tag and Push to Registry
+### 4. Tag and Push to Registry
 
 Tag the image for your Docker registry:
 
@@ -159,7 +149,7 @@ docker push your-registry/dbaas:2.0.1
 
 **Note**: Docker Swarm requires images to be available in a registry accessible from all nodes.
 
-### 6. Admin Databases
+### 5. Admin Databases
 
 The admin databases must be up and running before the application service can
 be started. 
@@ -170,12 +160,15 @@ be started.
   docker service ls --filter name=mydb
 ```
 
-### 7. Deploy to Docker Swarm
+### 6. Deploy to Docker Swarm
 
 Deploy the MyDB stack:
 
 ```bash
+# Generate the resolved Docker Compose file with environment variables:
+envsubst < dbaas.yml > dbaas_resolved.yml
 docker stack deploy --detach -c dbaas_resolved.yml mydb
+
 ```
 
 Verify deployment:

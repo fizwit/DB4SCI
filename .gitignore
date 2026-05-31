@@ -1,5 +1,5 @@
 *.pyc
-.aws
+.aws/
 .env
 nohup.out
 *.key
