@@ -34,7 +34,9 @@ def pg_connection_string(user, password, port):
 
 
 def pg_admin_connect(dbname, port):
-    """Connect to PostgreSQL as admin user"""
+    """Connect to PostgreSQL as admin user
+       return a Postgres connection
+    """
     try:
         conn = psycopg.connect(
             host=mydb_config.container_host,
@@ -63,17 +65,22 @@ def auth_check(dbuser, dbuserpass, port):
     return True
 
 
-def create_init_script(params):
+def create_init_script(params, create_type):
     """create PostgreSQL init script to create user account and default database
 
     PostgreSQL initialization scripts in /docker-entrypoint-initdb.d/ are executed
     automatically when the container starts for the first time (when data directory is empty).
+     <create_type> = ['new', 'migrate', 'retore']
     """
 
     sql_init_script = """-- Create Role
 CREATE ROLE {{dbuser}} WITH LOGIN PASSWORD '{{dbuserpass}}';
 ALTER USER {{dbuser}} WITH SUPERUSER;
 
+-- Create Database
+"""
+    if create_type == 'new':
+        sql_init_script += """
 -- Create Database
 CREATE DATABASE "{{dbname}}";
 
@@ -177,7 +184,7 @@ def migrate(info):
     params["volume_name"] = volume_name
     # meta_data = json.dumps(params, indent=4)
     # print(f"DEBUG: postgres_util.migrate: {dbname}\nMeta data for container recovery: {meta_data}")
-    config_ref = create_init_script(params)
+    config_ref = create_init_script(params, 'migrate')
     if config_ref is None:
         return "Error: creating Docker Config"
     service, error = swarm_util.start_service(params, config_ref)
@@ -204,7 +211,7 @@ def create(params):
     volume_id, error = swarm_util.create_docker_volume(params["volume_name"])
     if error:
         return f"Error creatinge docker volume {params['volume_name']}. Error: {error}"
-    config_ref = create_init_script(params)
+    config_ref = create_init_script(params, 'new')
     if config_ref is None:
         return "Error: creating Docker Config"
 
@@ -530,7 +537,7 @@ def pg_restore(source, dest, S3_prefix):
         f"-d template1 -U {mydb_config.accounts[dbengine]['admin']}")
     pg_restore = (f"pg_restore --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
-        f"-U {mydb_config.accounts[dbengine]['admin']} -C --file")
+        f"-U {mydb_config.accounts[dbengine]['admin']} --clean --if-exists --format=c --file")
     password_env = {"PGPASSWORD": mydb_config.accounts[dbengine]["admin_pass"]}
 
     # Run SQL command file

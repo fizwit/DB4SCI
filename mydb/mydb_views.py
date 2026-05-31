@@ -28,8 +28,8 @@ from . import (
 )
 
 __name__ = "mydb"
-__version__ = "2.0.1"
-__release_date__ = "Oct, 2025"
+__version__ = "2.0.2"
+__release_date__ = "May, 2026"
 __author__ = "jfdey@fredhutch.org"
 
 
@@ -385,7 +385,8 @@ append admin commands to URL
 /admin/update?cid=n&key=value&...  Update Info with new key: values
 /admin/backup_audit
 /admin_mode?mode=[on|off]
-/admin/restoer_admin_db Restore myd_admin from S3 to migrate_db
+/admin/delete_container_state?cid=n
+/admin/restore_admin_db Restore myd_admin from S3 to migrate_db
 URL encoding tips:  Space: %20, @: %40"""
 
     return body
@@ -501,6 +502,10 @@ def admin(cmd):
         header, body = swarm_util.display_services()
         title = "MyDB Admin Services"
         return render_template("dblist.html", title=title, dbheader=header, dbs=body)
+    elif cmd == "delete_container_state":
+        """ Only removes the Metadata from admin_db """
+        admin_db.delete_container_state(request.args["cid"])
+        return "Administratively removed meta data from admin_db"
     else:
         return "incorect admin URL" + cmd
 
