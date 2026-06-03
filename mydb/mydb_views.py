@@ -28,7 +28,7 @@ from . import (
 )
 
 __name__ = "mydb"
-__version__ = "2.0.2"
+__version__ = "2.0.3"
 __release_date__ = "May, 2026"
 __author__ = "jfdey@fredhutch.org"
 
@@ -140,7 +140,7 @@ def migrate_restore():
 @app.route("/create_form/", methods=["GET"])
 @auth_required
 def create_form():
-    """called from layout.html
+    """called from main_menu.html
     dbengine has to be passed as an arg
     Value of dbengine has to match <info> data from mydb_config.py
     Example: "Postgres", "MongoDB", "MariaDB"...
@@ -198,7 +198,7 @@ admin_actions = [
 @app.route("/select_container/", methods=["GET"])
 @auth_required
 def select_container():
-    """redirected from layout.html - general purpose menu for selecting a container
+    """redirected from main_menu.html - general purpose menu for selecting a container
     from selected_container direct to <selected> and perform <dbaction>
     """
     action = request.args["dbaction"]
@@ -310,7 +310,7 @@ def selected():
 @app.route("/select_with_auth/", methods=["GET"])
 @auth_required
 def select_with_auth():
-    """from layout.html general purpose menu to select something that
+    """from main_menu.html general purpose menu to select something that
     requires auth. from selected_with_container direct to <selected_auth> and perform <dbaction>
     """
     action = request.args["dbaction"]

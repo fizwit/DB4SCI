@@ -176,7 +176,7 @@ def s3_file_restore(s3_url, restore_command, env):
     # Create safe command for logging
     safe_message = hide_password(" ".join(restore_cmd_list))
 
-    print(f"DEBUG backup_util.s3_file_restore: {safe_message}")
+    print(f"DEBUG backup_util.s3_file_restore: {restore_cmd_list}")
     print(f"DEBUG backup_util.s3_file_restore: local_file: {local_file}")
 
     result_msg = f"Restoring from local file: {local_file}\n"
@@ -207,8 +207,8 @@ def s3_file_restore(s3_url, restore_command, env):
             # Clean up downloaded file
             try:
                 os.remove(local_file)
-            except:
-                pass
+            except FileNotFoundError:
+                print(f"backup_util.s3_file_restore: Failed to remove {local_file}: File not found")
             return (False, result_msg)
         else:
             result_msg += "Restore completed successfully\n"
@@ -219,8 +219,8 @@ def s3_file_restore(s3_url, restore_command, env):
             # Clean up downloaded file
             try:
                 os.remove(local_file)
-            except:
-                pass
+            except FileNotFoundError:
+                print(f"backup_util.s3_file_restore: Failed to remove {local_file}: File not found")
             return (True, result_msg)
 
     except subprocess.TimeoutExpired:
@@ -230,8 +230,8 @@ def s3_file_restore(s3_url, restore_command, env):
         # Clean up downloaded file
         try:
             os.remove(local_file)
-        except:
-            pass
+        except FileNotFoundError:
+            print(f"backup_util.s3_file_restore: Failed to remove {local_file}: File not found")
         return (False, error_msg)
     except Exception as e:
         error_msg = f"Unexpected error during restore: {e}"
@@ -282,7 +282,7 @@ def s3_piped_restore(s3_url, restore_command, env=None):
     full_command = f"{aws_cmd_str} |  \\\n {restore_command}"
     safe_message = hide_password(full_command)
 
-    print(f"DEBUG backup_util.s3_piped_restore: {safe_message}")
+    print(f"DEBUG backup_util.s3_piped_restore: {full_command}")
     print(f"command array: {restore_cmd_list}")
     result_msg = f"Restoring from S3: {s3_url}\n"
     result_msg += f"Command: {safe_message}\n\n"

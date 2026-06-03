@@ -224,6 +224,7 @@ def save_s3_obj(s3_url, filename):
 
 
 def get_files_in_s3(prefix):
+    """ return all S3 file URLs that match the given prefix """
     s3_client = boto3.client("s3")
 
     boto_bucket = mydb_config.AWS_BUCKET_NAME.replace("s3://", "").rstrip("/")
@@ -238,7 +239,6 @@ def get_files_in_s3(prefix):
                 # Reconstruct full S3 URL
                 file_url = f"{mydb_config.AWS_BUCKET_NAME}/{obj['Key']}"
                 file_list.append(file_url)
-
         return file_list
 
     except ClientError as e:

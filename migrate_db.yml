@@ -5,18 +5,18 @@ services:
     volumes:
       - migrate_db:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: ${MYDB_ADMIN_USER} 
-      POSTGRES_PASSWORD: ${MYDB_MIGRATE_PASSWORD} 
-      POSTGRES_DB: 'mydb_admin'
+      POSTGRES_USER: "${MYDB_ADMIN_USER}"
+      POSTGRES_PASSWORD: "${MYDB_MIGRATE_PASSWORD}"
+      POSTGRES_DB: "mydb_admin"
       PGOPTIONS: "-c password_encryption=md5"
     labels:
       'BACKUP_FREQ': 'Daily'
-      'CONTACT': ${CONTACT_MAIL} 
+      'CONTACT': "${CONTACT_MAIL}"
       'DB_NAME': 'mydb_admin'
       'DB_USER': 'mydbadmin'
       'DBaaS': 'true'
       'DESCRIPTION': 'MyDB DBaaS Migration Data'
-      'OWNER': '${supportPerson}'
+      'OWNER': "${supportPerson}"
     tmpfs:
       - /dev/shm:size=1g
     ports:

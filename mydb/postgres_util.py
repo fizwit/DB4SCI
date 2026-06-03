@@ -520,24 +520,28 @@ def pg_restore(source, dest, S3_prefix):
     There may be multiple dump files for additional DB's
     require connection string to restore target
 
-    Returns: all the stdout from the commands. If an error add the stderr, to
+    Returns: all the stdout from the commands. If an error occures, add the stderr, to
        the messages.  pg_dump restore never works without some kind of
        error messages/warnings.
     """
-    # Create the database
-    # psql -h sc-build-02 -p 32271 -U pgdba -d postgres -c "CREATE DATABASE \"bcr-trac\";"
 
-    # Source backup files
+    result_msg = ""
     backup_files = aws_util.get_files_in_s3(S3_prefix)
+    print(f"backup_files: {backup_files}")
     if len(backup_files) == 0:
         return "Could not find any files to restore PostgreSQL database."
-    # psql_cmd = pg_command("psql", dest["Port"], dest["dbname"])
+    else:
+        result_msg = f"pg_restore: restoring from {S3_prefix}\n"
+        for backup_file in backup_files:
+            base_file = os.path.basename(backup_file)
+            result_msg = f" s3 objects: {base_file}..."
     psql_cmd = (f"psql --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
         f"-d template1 -U {mydb_config.accounts[dbengine]['admin']}")
     pg_restore = (f"pg_restore --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
-        f"-U {mydb_config.accounts[dbengine]['admin']} --clean --if-exists --format=c --file")
+        f"-U {mydb_config.accounts[dbengine]['admin']} --dbname postgres "
+        "--clean --if-exists --format=c ")
     password_env = {"PGPASSWORD": mydb_config.accounts[dbengine]["admin_pass"]}
 
     # Run SQL command file
@@ -548,7 +552,7 @@ def pg_restore(source, dest, S3_prefix):
     if not SQL_file:
         return "Could not find a SQL file for PostgreSQL restore. This is bad."
 
-    result_msg = f"Restoring: {dest['dbname']}"
+    result_msg += f"Restoring: {dest['dbname']}"
     if dest.get("SQL", "yes") != "no":
         success, msg = backup_util.s3_piped_restore(
             SQL_file, psql_cmd, env=password_env
@@ -559,10 +563,10 @@ def pg_restore(source, dest, S3_prefix):
 
     # Restore data from dump files
     for backup_file in backup_files:
-        base_file = os.path.basename(backup_file)
         if ".dump" in backup_file[-5:]:
             success, msg = backup_util.s3_file_restore(backup_file, pg_restore, env=password_env)
             if not success:
+                base_file = os.path.basename(backup_file)
                 result_msg += f"Error restoring {base_file}:\n{msg}\n"
             else:
                 result_msg += msg
