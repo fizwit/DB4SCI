@@ -329,6 +329,6 @@ def get_lastbackup_from_log(name):
         return f"No backup found for container c_id: {name}"
 
 
-def mirgrate(info):
+def migrate(info):
     """Migrate MariaDB data"""
     return "Not implemented yet"

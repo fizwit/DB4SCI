@@ -28,3 +28,4 @@ mydb/test_params.py
 setup.cfg
 .mydb_venv
 setup.cfg
+dbaas_resolved.yml
