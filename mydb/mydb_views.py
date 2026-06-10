@@ -383,7 +383,7 @@ append admin commands to URL
 /admin/containers   Display summary from containers
 /admin/data?cid=n  Display Docker inspect from AdminDB
 /admin/update?cid=n&key=value&...  Update Info with new key: values
-/admin/backup_audit
+/admin/backup_audit[?name=xx | cid=x]  Display backup audit report for container
 /admin_mode?mode=[on|off]
 /admin/delete_container_state?cid=n
 /admin/restore_admin_db Restore myd_admin from S3 to migrate_db
@@ -459,15 +459,20 @@ def admin(cmd):
             title=f"S3 Prefix for last 'prod' backup of {args['name']}",
             dbs=body,
         )
-    elif cmd == "backup_audit":
-        """   File "./mydb/backup_util.py", line 101, in backup_report
-        header = 'Backup report for {}'.format(data['Info']['Name'])
-        TypeError: list indices must be integers, not str
-        """
-        (header, body) = backup_util.backup_audit(args["name"], c_id=cid)
+    elif cmd == "backup_all":
+        body = backup_util.backup_all()
         return render_template(
-            "dblist.html", title="Backup Report", dbheader=header, dbs=body
+            "dblist.html", title="Backup All", dbheader="", dbs=body
         )
+    elif cmd == "backup_audit":
+        title = f"Backup AuditReport for prefix:{mydb_config.s3_prefix_prod}"
+        if "name" in args:
+            (header, body) = backup_util.backup_audit(args["name"])
+        elif "cid" in args:
+            (header, body) = backup_util.backup_audit(cid=args["cid"])
+        else:
+            (header, body) = backup_util.backup_audit()
+        return render_template("dblist.html", title=title, dbheader=header, dbs=body)
     elif cmd == "log":
         (header, body) = admin_db.display_container_log()
         return render_template(
@@ -531,6 +536,16 @@ def admin_mode():
         dbheader = f"Set MyDB Admin Mode"
         return render_template("dblist.html", title=title, dbheader=dbheader, dbs=body)
     return render_template("admin_mode.html")
+
+@app.route("/cron/<cmd>")
+def cron(cmd):
+    if request.headers.get("Task-Token") != mydb_config.MYDB_TASK_TOKEN:
+        return "<h2> invalid task token</h2>"
+    if cmd == "backup_all":
+        body = backup_util.backup_all()
+        return render_template(
+            "dblist.html", title="Backup All", dbheader="", dbs=body
+        )
 
 
 @app.route("/certs/<filename>", methods=["GET"])

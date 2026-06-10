@@ -254,7 +254,7 @@ docker service update --force mydb_<container_name>
 docker service logs mydb_dbaas --tail 100
 
 # Follow logs in real-time
-docker service logs -f mydb_dbaas
+docker service logs --follow mydb_dbaas
 
 # View logs from last hour
 docker service logs mydb_dbaas --since 1h

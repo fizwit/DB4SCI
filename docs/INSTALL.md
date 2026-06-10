@@ -63,21 +63,17 @@ Edit `mydb/mydb_config.py` to configure:
 
 #### Configure Environment Variables
 
-Copy the environment template and configure secrets:
+Create an `.env` file in the top-level directory with the following content:
 
 ```bash
-cp env_example .env
+FLASK_SECRET=
+TASK_TOKEN="secret strig used header requests to protect admin UI"
+SQLALCHEMY_ADMIN_URI=
+SQLALCHEMY_MIGRATE_URI=""
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_BUCKET_NAME=
 ```
-
-Edit `.env` and set:
-- `FLASK_SECRET` - Flask session secret key
-- `SQLALCHEMY_ADMIN_URI` - Admin database connection string
-- `AWS_ACCESS_KEY_ID` - AWS credentials for S3 backups
-- `AWS_SECRET_ACCESS_KEY` - AWS secret key
-- `AWS_BUCKET_NAME` - S3 bucket name
-- `MAIL_TO` - Email recipients for notifications
-- Active Directory configuration (if applicable)
-
 
 ### 2. Customize Branding (Optional)
 
@@ -288,11 +284,10 @@ docker images | grep -E 'postgres|mariadb|mongo'
 
 ## Security Considerations
 
-1. **Secrets Management**: All sensitive credentials should be stored as Docker secrets, not in configuration files
-2. **Network Isolation**: Consider using Docker overlay networks to isolate database services
-3. **Access Control**: Configure firewall rules to restrict access to database ports
-4. **S3 Bucket**: Use IAM roles with minimal required permissions for S3 access
-5. **HTTPS**: Deploy a reverse proxy (nginx, traefik) with SSL/TLS for production use
+1. **Network Isolation**: Consider using Docker overlay networks to isolate database services
+2. **Access Control**: Configure firewall rules to restrict access to database ports
+3. **S3 Bucket**: Use IAM roles with minimal required permissions for S3 access
+4. **HTTPS**: Deploy a reverse proxy (nginx, traefik) with SSL/TLS for production use
 
 ## Troubleshooting
 
@@ -329,7 +324,7 @@ Common issues:
 ### Authentication Issues
 
 1. Verify AD server connectivity from container
-2. Check AD credentials in secrets
+2. Check AD configuration
 3. Review authentication logs in application logs
 
 ## Upgrade Procedure
@@ -401,10 +396,7 @@ To remove MyDB:
 
 ```bash
 # Remove stack
-docker stack rm mydb
-
-# Remove secrets
-docker secret rm $(docker secret ls -q -f "name=mydb_")
+docker service rm mydb
 
 # Remove volumes (WARNING: This deletes all database data)
 docker volume rm $(docker volume ls -q -f "name=mydb_")

@@ -5,6 +5,9 @@ ENV FLASK_APP=mydb
 ENV PYTHONUNBUFFERED=1
 ENV TZ='America/Los_Angeles'
 
+# DBAAS run time environment = [prod, test, dev]
+ENV DBAAS_ENV=dev
+
 # Update the system and install packages
 RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive \
@@ -38,12 +41,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 
 # Copy files to container
-ENV env=prod
 ADD *.py /app
 ADD mydb /app/mydb/
 
 # Setup cron for backups
-COPY backup-cron /etc/cron.d/backup-cron
+COPY mydb_backup.crontab /etc/cron.d/backup-cron
 RUN chmod 0644 /etc/cron.d/backup-cron && \
     crontab -u dbaas /etc/cron.d/backup-cron && \
     touch /var/log/backup_all.log && \

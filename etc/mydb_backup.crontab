@@ -1,3 +1,16 @@
 # crontab for mydb backup script goes here
+# in the crontab (cron has a minimal env, so set it here)
+MYDB_TASK_TOKEN=
+5 1 * * * wget -q -O /dev/null --header="DB4SCI-Task-Token: $MYDB_TASK_TOKEN" http://localhost/cron/backup_all > /proc/1/fd/1 2>&1
+
 MAILTO=""
 07 18 * * * root docker exec -t dbaas bash -c 'DOCKER_CLIENT_TIMEOUT=3600; /opt/dbaas/backup_all.py' >/dev/null 2>&1 
+# DB4Sci Database Backup Cron Schedule
+# Run daily backups at 2:00 AM
+0 2 * * * cd /app && /usr/local/bin/python /app/backup_all.py >> /var/log/backup_all.log 2>&1
+
+# Run weekly backups on Saturday at 3:00 AM
+0 3 * * 6 cd /app && /usr/local/bin/python /app/backup_all.py --weekly >> /var/log/backup_all.log 2>&1
+
+PYTHONUNBUFFERED=1
+* * * * * /usr/local/bin/python /app/backup_all.py > /proc/1/fd/1 2>/proc/1/fd/2

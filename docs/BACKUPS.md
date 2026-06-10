@@ -6,10 +6,10 @@ This guide explains MyDB's backup architecture and how to configure automated ni
 
 MyDB uses a **stream-to-S3** backup strategy where database dumps are piped directly to AWS S3 without creating intermediate local files. This approach:
 
-- Minimizes disk space requirements
+- Minimizes local disk space requirements
 - Provides immediate offsite storage
 - Reduces backup window time
-- Simplifies backup management
+- Simplifies backup management, there is only one location for backups
 
 ### Security
 
@@ -40,15 +40,15 @@ pg_dump -F c dbname | aws s3 cp - s3://bucket/prefix/dbname.dump
 All backup operations are logged to the MyDB admin database in the `backups` table, tracking:
 - Backup ID and timestamp
 - S3 URL location
-- Backup type (Daily, Weekly, User, Admin)
+- Backup type [Daily, Weekly, User, Admin]
 - Command executed
 - Success/failure status
 
 ## Automated Nightly Backups
 
-MyDB includes `backup_all.py` - a Python script that performs nightly backups of all active database instances.
+The `backup_util.backup_all()` function is responsible for performing nightly backups of all active database instances. The route `POST /cron/backup_all` triggers this function. The `TASK_TOKEN` is passed in the request header to verify the request is authorized. A cron job on the `dbaas` service triggers this route nightly. Each database instance has a `BACKUP_FREQ` metadata field that determines whether it should be backed up. 'Weekly' instances are backed up on Saturdays. 'Daily' instances are backed up every night. The option of 'None' means the instance should not be backed up.
 
-### What `backup_all.py` Does
+### What the route `/cron/backup_all` Does
 
 1. **Queries** the admin database for all active containers
 2. **Checks** each container's `BACKUP_FREQ` metadata (Daily, Weekly, or None)
@@ -58,128 +58,17 @@ MyDB includes `backup_all.py` - a Python script that performs nightly backups of
 
 ### Backup Schedule
 
-Backups are scheduled based on container metadata:
-
-- **Daily backups**: Run every night
-- **Weekly backups**: Run on Saturdays (configurable)
-- **No backups**: Containers marked with no backup frequency are skipped
+Backups are scheduled based on container metadata. I like to start backups at 1 AM every night so the backup process doesn't interfere with regular database usage and the start/stop times of the backups are in the same calendar day.
 
 Users can trigger on-demand backups through the web interface at any time.
 
-### Recommended: External Cron Server
-
-The recommended approach is to run `backup_all.py` from an external server with cron scheduling.
-
-#### Prerequisites
-
-The backup server needs:
-
-1. **Network access** to database ports (32010-32999)
-2. **Database client tools** installed
-3. **AWS CLI** configured with S3 access credentials
-4. **Python 3.12+** with MyDB dependencies
-5. **Access to MyDB admin database**
-
 #### Installation Steps
 
-**1. Install required packages:**
+Everything is done from the `dbaas` service. The **Dockerfile** sets up the cron job that triggers the backup process. `docker build .` uses the Dockerfile to build the image. The build process moves the file `etc/mydb_backup.crontab` into the container and sets up the cron job. If you want to change the backup schedule, you can modify the `etc/mydb_backup.crontab` file and rebuild the image.
 
-```bash
-# Database client tools
-sudo apt install postgresql-client mariadb-client mongodb-clients
+** Test the backup route **
 
-# AWS CLI
-sudo apt install awscli
-
-# Python dependencies
-sudo apt install python3-pip python3-venv
-```
-
-**2. Clone MyDB repository:**
-
-```bash
-cd /opt
-git clone https://github.com/your-org/mydb.git
-cd mydb
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-**3. Configure environment variables:**
-
-Create a configuration file with required environment variables:
-
-```bash
-cat > /opt/mydb/.backup_env << 'EOF'
-# MyDB Admin Database Connection
-export SQLALCHEMY_ADMIN_URI="postgresql://mydbadmin:PASSWORD@db-host.example.org:32009/mydb_admin"
-
-# AWS S3 Credentials
-export AWS_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE"
-export AWS_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-export AWS_BUCKET_NAME="s3://your-org-mydb-backups"
-export AWS_DEFAULT_REGION="us-west-2"
-
-# Timezone
-export TZ="America/Los_Angeles"
-EOF
-
-# Secure the credentials file
-chmod 600 /opt/mydb/.backup_env
-```
-
-**4. Test the backup script:**
-
-```bash
-source /opt/mydb/.backup_env
-cd /opt/mydb
-.venv/bin/python backup_all.py
-
-# Test single container backup
-.venv/bin/python backup_all.py container_name
-```
-
-**5. Configure cron:**
-
-Create a cron job to run backups nightly:
-
-```bash
-# Edit crontab
-crontab -e
-```
-
-Add the following entry:
-
-```cron
-# MyDB automated nightly backups at 2:00 AM
-0 2 * * * source /opt/mydb/.backup_env && cd /opt/mydb && .venv/bin/python backup_all.py >> /var/log/mydb_backup.log 2>&1
-
-# Weekly backups on Saturday at 3:00 AM (optional)
-0 3 * * 6 source /opt/mydb/.backup_env && cd /opt/mydb && .venv/bin/python backup_all.py --weekly >> /var/log/mydb_backup_weekly.log 2>&1
-```
-
-**6. Set up log rotation:**
-
-Create `/etc/logrotate.d/mydb_backup`:
-
-```
-/var/log/mydb_backup.log {
-    daily
-    rotate 30
-    compress
-    missingok
-    notifempty
-}
-
-/var/log/mydb_backup_weekly.log {
-    weekly
-    rotate 12
-    compress
-    missingok
-    notifempty
-}
-```
+The `backup_all` route can be reached with the `/admin/backup_all` endpoint. You must be authenticated as an admin user to access this endpoint.
 
 #### Monitoring Backups
 
