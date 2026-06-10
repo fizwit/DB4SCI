@@ -3,6 +3,7 @@ from flask import render_template, session
 from . import (
     admin_db,
     aws_util,
+    backup_util,
     mariadb_util,
     migrate_db,
     mongodb_util,
@@ -16,11 +17,13 @@ def admin_actions(action, args):
     """called from mydb_views after `Select-Selected` UI"""
     container_name = args["container_name"]
     dbengine, info = container_info(container_name, "admin")
+    title = "Error retrieving container info"
     if "Error:" == dbengine[:6]:
         result = dbengine
         header = "Service not found"
 
     if action == "audit_db":
+        title = "Audit Database"
         header = f"Audit report for {container_name}"
         if dbengine == "Postgres":
             result = postgres_util.pg_audit(info)
@@ -29,17 +32,33 @@ def admin_actions(action, args):
         else:
             result = f"Audit not implemented for {dbengine}."
     elif action == "admin_delete":
+        title = "Admin - Remove Service"
         result = swarm_util.admin_delete(container_name, session["username"])
         header = "Remove Service"
     elif action == "connection":
+        title = "Connection Command"
         result = connection_cmd(dbengine, info)
         header = f"{dbengine} Database connection command for {info['dbname']}"
+    elif action == "backup":
+        title = "Backup Service"
+        if dbengine == "Postgres":
+            result = postgres_util.pg_backup(info)
+        elif dbengine == "MariaDB":
+            result = mariadb_util.mariadb_backup(info)
+        else:
+            result = f"Backup not implemented for {dbengine}."
+        header = f"{dbengine} Backup"
+    elif action == "backup_all":
+        title = ""
+        header = ""
+        result = backup_util.backup_all()
     else:
-        result = f"Not sure how you got here {container_name} DBengine: {dbengine}"
+        title = "Unknown Operation"
         header = "Unknown Operation"
+        result = f"Not sure how you got here {container_name} DBengine: {dbengine}"
     return render_template(
         "action_result.html",
-        title="Database Audit",
+        title=title,
         header=header,
         result=result,
     )

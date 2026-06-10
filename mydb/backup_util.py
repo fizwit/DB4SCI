@@ -2,8 +2,12 @@ import datetime
 import os
 import subprocess
 import sys
+import time
 
+from mydb import postgres_util
 from . import admin_db, mydb_config
+from .send_mail import send_mail
+
 
 """
 audit MyDB backups. Check MyDB Admin backup logs.
@@ -446,6 +450,36 @@ def backup_audit(name=None, c_id=None):
     else:
         (header, body) = backup_audit_all()
     return (header, body)
+
+def backup_all():
+    """backup all running containers
+    get list of all "running" containers
+    Check <BACKUP_FREQ> for each container
+    <BACKUP_FREQ> can have the following values: ['None', 'Daily', 'Weekly']
+    """
+    t = time.localtime()
+    DofW = t.tm_wday
+    msg = "Backup_all has completed database backups for all containers.\n"
+    msg += f"Environment: {mydb_config.DBAAS_ENV}"
+    containers = admin_db.list_active_containers()
+    for c_id, con_name in containers:
+        data = admin_db.get_container_data("", c_id)
+        info = data["Info"]
+        if "BACKUP_FREQ" in info:
+            policy = info["BACKUP_FREQ"]
+        else:
+            continue
+        if policy == "Weekly" and DofW != 5: # Saturday
+            continue
+        elif policy == "None":
+            continue
+        info['username'] = 'cron'
+        if 'dbengine' in info:
+            if info['dbengine'] == 'Postgres':
+                message = postgres_util.backup(info, 'Admin')
+                msg += message
+    send_mail("MyDB: backup_all db", msg, mydb_config.backup_admin_mail)
+    return msg
 
 
 if __name__ == "__main__":
