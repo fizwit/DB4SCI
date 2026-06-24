@@ -43,7 +43,7 @@ def pg_admin_connect(dbname, port):
             user=mydb_config.accounts[dbengine]["admin"],
             password=mydb_config.accounts[dbengine]["admin_pass"],
             port=port,
-            dbname="postgres",
+            dbname=dbname,
         )
     except psycopg.Error as e:
         print(f"Error pg_admin_connect: connecting to PostgreSQL: {e}")
@@ -143,6 +143,7 @@ def build_params_postgres(info) -> dict:
     params["service_user"] = config_data["service_user"]
     params["dbname"] = info["Name"]
     params["Name"] = info["Name"]
+    params["backup_freq"] = info["BACKUP_FREQ"]
     if "POSTGRES_USER" in info:
         params["dbuser"] = info["POSTGRES_USER"]
     elif "DB_USER" in info:
@@ -253,7 +254,7 @@ def create(params):
     return res
 
 
-def backup(info, backup_type):
+def backup(c_id, info, backup_type):
     """Backup all databases for a given Postgres container
     type: str ['User', 'Admin']
     """
@@ -276,7 +277,7 @@ def backup(info, backup_type):
 
     # Log backup start
     admin_db.backup_log(
-        info["cid"],
+        c_id,
         Name,
         "start",
         backup_id,
@@ -326,6 +327,7 @@ def backup(info, backup_type):
 
     message += f"\nBacking up {len(dbs)} database(s):\n"
     # Back up each database
+    pg_dump_cmd = ""
     for db in dbs:
         dbname = db[0]
         s3_dump_url = f"{s3_url}{Name}_{dbname}.dump"
@@ -350,7 +352,7 @@ def backup(info, backup_type):
             message += msg
 
     admin_db.backup_log(
-        info["cid"],
+        c_id,
         Name,
         "end",
         backup_id,
@@ -389,6 +391,8 @@ def pg_audit(Info):
 
     # Connect to postgres database to get system info
     conn = pg_admin_connect("postgres", Info["Port"])
+    if conn is None:
+        return "\nUnable to connect to PostgreSQL database.\n".join(report)
     cur = conn.cursor()
 
     # 1. List all users/roles
@@ -470,7 +474,8 @@ def pg_audit(Info):
     report.append("=" * 80)
     report.append("Audit Complete")
     report.append("=" * 80)
-
+    if mydb_config.FLASK_DEBUG == "1":
+        print(report)
     return "\n".join(report)
 
 
@@ -540,7 +545,7 @@ def pg_restore(source, dest, S3_prefix):
         f"-d template1 -U {mydb_config.accounts[dbengine]['admin']}")
     pg_restore = (f"pg_restore --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
-        f"-U {mydb_config.accounts[dbengine]['admin']} --dbname postgres "
+        f"-U {mydb_config.accounts[dbengine]['admin']} --dbname postgres " #XXX
         "--clean --if-exists --format=c ")
     password_env = {"PGPASSWORD": mydb_config.accounts[dbengine]["admin_pass"]}
 
