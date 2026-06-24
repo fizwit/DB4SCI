@@ -51,7 +51,7 @@ SQLALCHEMY_MIGRATE_URI="postgresql+psycopg://mydbadmin:CHANGE_ME_MIGRATE_PASSWOR
 # MyDB Container Host Configuration
 # =============================================================================
 
-# Environment identifier (dev, staging, prod)
+# Environment identifier ('prod', 'dev', 'test') 
 DBAAS_ENV='prod'
 
 # Hostname where MyDB and database containers run

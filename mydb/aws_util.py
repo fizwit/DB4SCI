@@ -16,7 +16,7 @@ def create_backup_prefix(Name):
     """
     t = time.localtime()
     backup_id = f"{t[0]}-{t[1]:02d}-{t[2]:02d}_{t[3]:02d}:{t[4]:02d}:{t[5]:02d}"
-    if mydb_config.DBAAS_ENV == "dev":
+    if mydb_config.DB4SCI_ENV == "dev":
         prefix = f"/{mydb_config.s3_prefix_dev}/{Name}/{backup_id}/"
     else:
         prefix = f"/{mydb_config.s3_prefix_prod}/{Name}/{backup_id}/"

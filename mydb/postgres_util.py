@@ -479,45 +479,6 @@ def pg_audit(Info):
     return "\n".join(report)
 
 
-def showall(params):
-    """Execute Postgres SHOW ALL command"""
-    connect = pg_connection_string(
-        mydb_config.accounts[dbengine]["admin"],
-        {mydb_config.accounts[dbengine]["admin_pass"]},
-        params["Port"],
-    )
-    try:
-        conn = psycopg.connect(connect)
-        cur = conn.cursor()
-    except Exception as e:
-        print("ERROR: postgres_util; showall: %s" % e)
-        return
-    cur.execute("SHOW ALL")
-    rows = cur.fetchall()
-    for row in rows:
-        print(row[0], row[1])
-    cur.close()
-    conn.close()
-
-
-def pg_command(cmd, port, dbname):
-    """Build PostgreSQL command"""
-    if cmd == 'pg_dump':
-        db_connection = f"-d {dbname}"
-    elif cmd == 'pg_restore':
-        db_connection = f"-d {dbname}"
-    else:
-        db_connection = "-d postgres"
-    return " ".join(
-        [
-            f"{cmd} -h {mydb_config.container_host}",
-            f"-p {port}",
-            db_connection,
-            f"-U {mydb_config.accounts[dbengine]['admin']}",
-        ]
-    )
-
-
 def pg_restore(source, dest, S3_prefix):
     """Restore Postgres database from S3
     <source> and <dest> are container data structure: like `params`

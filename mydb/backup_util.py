@@ -356,8 +356,8 @@ def check_backup_logs(info, c_id):
     verify that backup started and ended
     verify that backup was run within policy (Daily or Weekly)
     """
-    msg = "%-30s %-10s %-6s " % (info["Name"], info["dbengine"], info["BACKUP_FREQ"])
-    policy = info["BACKUP_FREQ"]
+    msg = "%-30s %-10s %-6s " % (info["Name"], info["dbengine"], info["backup_freq"])
+    policy = info["backup_freq"]
     now = datetime.datetime.now()
     if policy == "Daily":
         since = now - datetime.timedelta(days=1)
@@ -395,8 +395,8 @@ def check_backup_logs(info, c_id):
 
     header = "Backup Logs for {}\n\n".format(data["Info"]["Name"])
     header += "%-26s Error Msg" % ("Start Time (UTC)")
-    if "BACKUP_FREQ" in data["Info"]:
-        policy = data["Info"]["BACKUP_FREQ"]
+    if "backup_freq" in data["Info"]:
+        policy = data["Info"]["backup_freq"]
     else:
         msg += "Extreme Badness: Backup policy not set for %s.\n" % name
         return (header, msg)
@@ -431,8 +431,8 @@ def backup_audit_all():
     msg = ""
     for c_id, con_name in containers:
         data = admin_db.get_container_data("", c_id)
-        if "BACKUP_FREQ" in data["Info"]:
-            policy = data["Info"]["BACKUP_FREQ"]
+        if "backup_freq" in data["Info"]:
+            policy = data["Info"]["backup_freq "]
         else:
             msg += "Extreme Badness: Backup policy not set for %s.\n" % con_name
             continue
@@ -454,19 +454,25 @@ def backup_audit(name=None, c_id=None):
 def backup_all():
     """backup all running containers
     get list of all "running" containers
-    Check <BACKUP_FREQ> for each container
-    <BACKUP_FREQ> can have the following values: ['None', 'Daily', 'Weekly']
+    Check <backup_freq> for each container
+    backup_freq can have the following values: ['None', 'Daily', 'Weekly']
     """
     t = time.localtime()
     DofW = t.tm_wday
+    s = time.strftime("%A, %B %d, %Y %H:%M:%S")
     msg = "Backup_all has completed database backups for all containers.\n"
-    msg += f"Environment: {mydb_config.DBAAS_ENV}"
+    msg += f"Environment: {mydb_config.DB4SCI_ENV}\n"
+    msg += f"Start: {s}\n"
+    print(msg)
     containers = admin_db.list_active_containers()
     for c_id, con_name in containers:
         data = admin_db.get_container_data("", c_id)
         info = data["Info"]
-        if "BACKUP_FREQ" in info:
-            policy = info["BACKUP_FREQ"]
+        print(f"Back_all: contaner: {con_name} {info}")
+        # backup_freq': 'Daily',
+        if "backup_freq" in info:
+            policy = info["backup_freq"]
+            print(f"backup_freq: policy: {policy}")
         else:
             continue
         if policy == "Weekly" and DofW != 5: # Saturday
@@ -475,9 +481,11 @@ def backup_all():
             continue
         info['username'] = 'cron'
         if 'dbengine' in info:
+            print(f"Back_all: dbengine: {info['dbengine']}")
             if info['dbengine'] == 'Postgres':
-                message = postgres_util.backup(info, 'Admin')
+                message = postgres_util.backup(c_id, info, 'Admin')
                 msg += message
+    msg += f"End: {time.strftime('%A, %B %d, %Y %H:%M:%S')}\n"
     send_mail("MyDB: backup_all db", msg, mydb_config.backup_admin_mail)
     return msg
 
