@@ -28,7 +28,7 @@ from . import (
 )
 
 __name__ = "mydb"
-__version__ = "2.0.3"
+__version__ = "2.0.3-b"
 __release_date__ = "May, 2026"
 __author__ = "jfdey@fredhutch.org"
 
@@ -537,15 +537,18 @@ def admin_mode():
         return render_template("dblist.html", title=title, dbheader=dbheader, dbs=body)
     return render_template("admin_mode.html")
 
-@app.route("/cron/<cmd>")
+
+@app.route("/cron/<cmd>", methods=["GET"])
 def cron(cmd):
-    if request.headers.get("Task-Token") != mydb_config.MYDB_TASK_TOKEN:
+    header = request.headers.get("DB4SCI-Task-Token")
+    print(f"cron: cmd: {cmd} Header: {header}")
+    if header != mydb_config.DB4SCI_TASK_TOKEN:
         return "<h2> invalid task token</h2>"
     if cmd == "backup_all":
         body = backup_util.backup_all()
-        return render_template(
-            "dblist.html", title="Backup All", dbheader="", dbs=body
-        )
+        return body, 204  # No Content
+    else:
+        return '<h2> invalid command</h2>', 400  # Bad Request
 
 
 @app.route("/certs/<filename>", methods=["GET"])

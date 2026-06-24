@@ -1,3 +1,4 @@
+from calendar import c
 import json
 import os
 import time
@@ -372,7 +373,7 @@ def create(params):
     return res
 
 
-def backup(info, backup_type):
+def backup(c_id, info, backup_type):
     """Backup all databases for a given MariaDB container
     mariadb-dump is run from the dbaas container and piped to S3
     """
@@ -400,7 +401,7 @@ def backup(info, backup_type):
 
     # Log backup start
     admin_db.backup_log(
-        info["cid"],
+        c_id,
         Name,
         "start",
         backup_id,
@@ -420,7 +421,7 @@ def backup(info, backup_type):
 
     # Log backup end
     admin_db.backup_log(
-        info["cid"],
+        c_id,
         Name,
         "end",
         backup_id,

@@ -5,8 +5,8 @@ ENV FLASK_APP=mydb
 ENV PYTHONUNBUFFERED=1
 ENV TZ='America/Los_Angeles'
 
-# DBAAS run time environment = [prod, test, dev]
-ENV DBAAS_ENV=dev
+# DB4SCI run time environment = [prod, test, dev]
+ENV DB4SCI_ENV=dev
 
 # Update the system and install packages
 RUN apt-get update -y && \
@@ -22,6 +22,7 @@ RUN apt-get update -y && \
     gcc \
     vim \
     cron \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create the sttrweb user and data directory
@@ -45,7 +46,7 @@ ADD *.py /app
 ADD mydb /app/mydb/
 
 # Setup cron for backups
-COPY mydb_backup.crontab /etc/cron.d/backup-cron
+COPY etc/mydb_backup.crontab /etc/cron.d/backup-cron
 RUN chmod 0644 /etc/cron.d/backup-cron && \
     crontab -u dbaas /etc/cron.d/backup-cron && \
     touch /var/log/backup_all.log && \

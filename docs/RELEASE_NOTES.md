@@ -1,5 +1,19 @@
 # Release Notes
 
+#### Version 2.0.4  Jun 2026
+  - Remove the backup_all.sh script. Create endpoint for backup_all, and rewrite as Python3
+    add backup_util:backup_all function.
+    add route `cron/backup_all`  mydb_views. The route is protected by checking for the http
+    header : DB4SCI_Task_Token
+    add route `admin/backup_all`  This route is protected by users with Admin privilages as defined
+    in mydb/mydb_config.py
+
+  - Change DBAAS_ENV to DB4SCI_ENV Lets be more consistent with Environment names
+
+### Version 2.0.3  May 2026 (not released)
+  - remove docker secrets
+  - Fix major Postgres Restore issues and recover issues
+
 #### Version 2.0.1 Oct, Nov, Dec 2025
 
   - Major rewrite for Docker Swarm
