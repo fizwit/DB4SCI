@@ -1,8 +1,8 @@
 import argparse
 import json
-import os
 import sys
 import time
+from pathlib import Path
 
 import psycopg
 from jinja2 import Template
@@ -65,8 +65,8 @@ def auth_check(dbuser, dbuserpass, port):
     return True
 
 
-def create_init_script(params, create_type):
-    """create PostgreSQL init script to create user account and default database
+def create_init_script(params):
+    """create PostgreSQL init script to create user account and user defined database
 
     PostgreSQL initialization scripts in /docker-entrypoint-initdb.d/ are executed
     automatically when the container starts for the first time (when data directory is empty).
@@ -77,10 +77,6 @@ def create_init_script(params, create_type):
 CREATE ROLE {{dbuser}} WITH LOGIN PASSWORD '{{dbuserpass}}';
 ALTER USER {{dbuser}} WITH SUPERUSER;
 
--- Create Database
-"""
-    if create_type == 'new':
-        sql_init_script += """
 -- Create Database
 CREATE DATABASE "{{dbname}}";
 
@@ -118,7 +114,7 @@ def pg_env(auth_meth=None) -> list:
     env = [
         f"POSTGRES_USER={mydb_config.accounts[dbengine]['admin']}",
         f"POSTGRES_PASSWORD={mydb_config.accounts[dbengine]['admin_pass']}",
-        f"POSTGRES_DB={mydb_config.accounts[dbengine]['admin']}",
+        "POSTGRES_DB=postgres",
     ]
     if auth_meth == "md5":
         env.append("POSTGRES_INITDB_ARGS=--auth-host=md5")
@@ -185,7 +181,7 @@ def migrate(info):
     params["volume_name"] = volume_name
     # meta_data = json.dumps(params, indent=4)
     # print(f"DEBUG: postgres_util.migrate: {dbname}\nMeta data for container recovery: {meta_data}")
-    config_ref = create_init_script(params, 'migrate')
+    config_ref = create_init_script(params)
     if config_ref is None:
         return "Error: creating Docker Config"
     service, error = swarm_util.start_service(params, config_ref)
@@ -212,7 +208,7 @@ def create(params):
     volume_id, error = swarm_util.create_docker_volume(params["volume_name"])
     if error:
         return f"Error creatinge docker volume {params['volume_name']}. Error: {error}"
-    config_ref = create_init_script(params, 'new')
+    config_ref = create_init_script(params)
     if config_ref is None:
         return "Error: creating Docker Config"
 
@@ -479,6 +475,21 @@ def pg_audit(Info):
     return "\n".join(report)
 
 
+def extract_dbname(s3_object):
+    """Extract instance, dbname, and dumpfile from S3 object path
+    Format of s3_object: <instance>/<dbname>_<timestamp>.dump
+    This is used for PostgreSQL database backups, where the instance name
+    has more than one database.
+
+    S3 Object path format: <'s3:/bucket_name/prefix/instanceName/instanceName_YYYY.MM.DD_HH.MM.SS/instance_dbname.dump>
+    """
+    path = Path(s3_object.rstrip('\n'))
+    dumpfile = path.name
+    instance = path.parent.parent.name
+    dbname = dumpfile.replace(instance + '_', '', 1)[:-5]
+    return instance, dbname, dumpfile
+
+
 def pg_restore(source, dest, S3_prefix):
     """Restore Postgres database from S3
     <source> and <dest> are container data structure: like `params`
@@ -493,20 +504,22 @@ def pg_restore(source, dest, S3_prefix):
 
     result_msg = ""
     backup_files = aws_util.get_files_in_s3(S3_prefix)
-    print(f"backup_files: {backup_files}")
+    if mydb_config.FLASK_DEBUG == "1":
+        print(f"DEBUG: pg_restore: {dest['dbname']} backup_files: {backup_files}")
     if len(backup_files) == 0:
         return "Could not find any files to restore PostgreSQL database."
     else:
         result_msg = f"pg_restore: restoring from {S3_prefix}\n"
         for backup_file in backup_files:
-            base_file = os.path.basename(backup_file)
+            path = Path(backup_file)
+            base_file = path.name
             result_msg = f" s3 objects: {base_file}..."
     psql_cmd = (f"psql --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
-        f"-d template1 -U {mydb_config.accounts[dbengine]['admin']}")
+        f"--dbname postgres -U {mydb_config.accounts[dbengine]['admin']}")
     pg_restore = (f"pg_restore --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
-        f"-U {mydb_config.accounts[dbengine]['admin']} --dbname postgres " #XXX
+        f"-U {mydb_config.accounts[dbengine]['admin']} --dbname XXXX "
         "--clean --if-exists --format=c ")
     password_env = {"PGPASSWORD": mydb_config.accounts[dbengine]["admin_pass"]}
 
@@ -530,10 +543,12 @@ def pg_restore(source, dest, S3_prefix):
     # Restore data from dump files
     for backup_file in backup_files:
         if ".dump" in backup_file[-5:]:
-            success, msg = backup_util.s3_file_restore(backup_file, pg_restore, env=password_env)
+            instance, dbname, _ = extract_dbname(backup_file)
+            print(f"Restoring {instance}{dbname} from {backup_file}")
+            restore_command = pg_restore.replace("XXXX", dbname)
+            success, msg = backup_util.s3_file_restore(backup_file, restore_command, env=password_env)
             if not success:
-                base_file = os.path.basename(backup_file)
-                result_msg += f"Error restoring {base_file}:\n{msg}\n"
+                result_msg += f"Error restoring {dbname} from {backup_file}:\n{msg}\n"
             else:
                 result_msg += msg
 
