@@ -9,6 +9,7 @@
     in mydb/mydb_config.py
 
   - Change DBAAS_ENV to DB4SCI_ENV Lets be more consistent with Environment names
+  - add `extract_dbname` too postgres_util.py;utility function to extract the database name from an S3 backup object. Postgres database can have multiple databases in a single backup. The dbname is needed for the connection string.
 
 ### Version 2.0.3  May 2026 (not released)
   - remove docker secrets

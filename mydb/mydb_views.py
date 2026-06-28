@@ -28,8 +28,8 @@ from . import (
 )
 
 __name__ = "mydb"
-__version__ = "2.0.3-b"
-__release_date__ = "May, 2026"
+__version__ = "2.0.4.1"
+__release_date__ = "June, 2026"
 __author__ = "jfdey@fredhutch.org"
 
 
