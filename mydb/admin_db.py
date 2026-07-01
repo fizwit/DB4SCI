@@ -3,12 +3,16 @@ import datetime
 import json
 from argparse import ArgumentParser
 
+from docker.types import swarm
+
+from mydb import swarm_util
 from sqlalchemy import create_engine, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
 
 from . import mydb_config
+from . import swarm_util
 from .format_fill import format_fill
 from .human import human_uptime
 
@@ -45,7 +49,22 @@ def init_db():
     from . import models
 
     Base.metadata.create_all(bind=engine)
-    print("Initialized production database")
+    if mydb_config.FLASK_DEBUG:
+        print("Initialized production database")
+    state_info = get_container_state(Name="admin_db")
+    if state_info is None:
+        """Add admin_db service if not present"""
+        params = {'backup_freq': 'Daily',
+                  'port': str(mydb_config.base_port - 1),
+                  'Name': 'admin_db',
+                  'dbname': 'admin_db',
+                  'dbengine': 'Postgres',
+                  'username': mydb_config.admins[0],
+                  'description': "DB4SCI admin database"}
+        service = swarm_util.get_service("mydb_admin_db")
+        if service:
+            add_service(service, params)
+
 
 
 """ActionLog CRUD
@@ -330,10 +349,10 @@ def get_container_info(Name) -> tuple:
     return tuple
     dbengine:  'Postgres', 'MariaDB', 'MongoDB', 'Neo4j' etc
     """
-    state = get_container_state(Name=Name)
-    if state:
-        data = get_container_data("", c_id=state.c_id)
-        c_id = state.c_id
+    state_info = get_container_state(Name=Name)
+    if state_info:
+        data = get_container_data("", c_id=state_info.c_id)
+        c_id = state_info.c_id
         info = data["Info"]
         # Standard key is dbengine
         dbengine = info.get("dbengine", "")
