@@ -1,5 +1,7 @@
 import json
+import tomllib
 from functools import wraps
+from pathlib import Path
 
 from flask import (
     redirect,
@@ -10,7 +12,7 @@ from flask import (
     url_for,
 )
 
-from mydb import app
+from . import app
 
 # from . import mongodb_util
 from . import (
@@ -27,10 +29,19 @@ from . import (
     swarm_util,
 )
 
-__name__ = "mydb"
-__version__ = "2.0.4.1"
-__release_date__ = "June, 2026"
-__author__ = "jfdey@fredhutch.org"
+# Application metadata is sourced from pyproject.toml (single source of truth)
+try:
+    _meta = tomllib.loads(
+        (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
+    )
+    _project = _meta.get("project", {})
+    __version__ = _project.get("version", "unknown")
+    __author__ = (_project.get("authors") or [{}])[0].get("email", "")
+    __release_date__ = _meta.get("tool", {}).get("db4sci", {}).get("release_date", "")
+except (OSError, tomllib.TOMLDecodeError):
+    __version__ = "unknown"
+    __release_date__ = ""
+    __author__ = ""
 
 
 def get_template_context():

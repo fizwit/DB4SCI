@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "DB4SCI"
+version = "2.0.4.1"
+description = "Database as a Service for Science — self-service database container management (MariaDB, PostgreSQL, MongoDB)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "John Dey", email = "jfdey@fredhutch.org" }]
+dependencies = [
+    "Flask>=3.0.0",
+    "MarkupSafe>=2.1.3",
+    "docker>=7.0.0",
+    "boto3>=1.34.0",
+    "ldap3>=2.9.1",
+    "pyyaml",
+    "sqlalchemy>=2.0.43",
+    "psycopg2-binary",
+    "psycopg==3.2.10",
+    "pymongo>=4.14.5",
+    "mariadb",
+    "cffi",
+    "cryptography",
+    "pycparser",
+    "pyOpenSSL",
+    "pytz",
+]
+
+[project.urls]
+Homepage = "https://github.com/fizwit/DB4SCI"
+
+[tool.setuptools]
+packages = ["mydb"]
+
+# DB4SCI-specific metadata (not part of the standard packaging schema)
+[tool.db4sci]
+release_date = "June, 2026"
