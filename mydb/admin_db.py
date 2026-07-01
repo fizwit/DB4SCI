@@ -1,11 +1,8 @@
 import copy
 import datetime
 import json
-from argparse import ArgumentParser
-
+import sys
 from docker.types import swarm
-
-from mydb import swarm_util
 from sqlalchemy import create_engine, desc
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.declarative import declarative_base
@@ -61,19 +58,23 @@ def init_db():
         state_info = get_container_state(Name="admin_db")
         if state_info is None:
             """Add admin_db service if not present"""
-            params = {'backup_freq': 'Daily',
-                      'Port': str(mydb_config.base_port - 1),
-                      'Name': 'admin_db',
-                      'dbname': 'admin_db',
-                      'dbengine': 'Postgres',
-                      'username': mydb_config.admins[0],
-                      'description': "DB4SCI admin database"}
-                      'labels': {
-                          'owner': mydb_config.supportPerson,
-                          'contact': mydb_config.supportEmail}
+            params = {
+                'backup_freq': 'Daily',
+                'Port': str(mydb_config.base_port - 1),
+                'Name': 'admin_db',
+                'dbname': 'admin_db',
+                'dbengine': 'Postgres',
+                'username': mydb_config.admins[0],
+                'description': "DB4SCI admin database",
+                'labels': {
+                    'owner': mydb_config.supportPerson,
+                    'contact': mydb_config.supportEmail,
+                }
             }
             service = swarm_util.get_service("mydb_admin_db")
             if service:
+                image = service.attrs['Spec']['TaskTemplate']['ContainerSpec']['Image'].split('@')[0]
+                params['image'] = image
                 add_service(service, params)
     except OperationalError as err:
         print(
@@ -82,7 +83,7 @@ def init_db():
             "Starting without an initialized admin database. Verify the "
             "'mydb_admin_db' service is running and reachable, then restart."
         )
-
+        sys.exit(1)
 
 
 """ActionLog CRUD
@@ -609,58 +610,3 @@ def backup_taillog(c_id, tail=None):
     db_session.commit()
     print(f"DEBUG: {__file__}.backup_taillog {result}")
     return result
-
-
-if __name__ == "__main__":
-    parser = ArgumentParser(
-        description="unit test for admin_db module",
-        usage="%(prog)s [options] module_name",
-    )
-    parser.add_argument(
-        "--info",
-        action="store",
-        dest="con_name",
-        help="display the info field for a container",
-    )
-    parser.add_argument(
-        "--state",
-        action="store_true",
-        dest="state",
-        help='List the "status" for all active containers',
-    )
-    parser.add_argument(
-        "--active",
-        action="store_true",
-        dest="active",
-        help="Display all active containers, from admin dB",
-    )
-    parser.add_argument(
-        "--show_event_logs",
-        action="store_true",
-        dest="show_event_logs",
-        help="Show MyDB event log",
-    )
-    results = parser.parse_args()
-
-    if results.con_name:
-        data = get_container_data(results.con_name)
-        if len(data) == 0:
-            print(f"{results.con_name} not found in state database")
-        else:
-            info = data["Info"]
-            print(f"Container DB Info[] for {results.con_name}")
-            for k in info.keys():
-                print("%-20s: %s" % (k, info[k]))
-    elif results.state:
-        (header, body) = display_container_state()
-        print(header)
-        print(body)
-    elif results.active:
-        (header, body) = display_active_containers()
-        print(header)
-        print(body)
-    elif results.show_event_logs:
-        (header, body) = display_container_log()
-        print("MyDB Event Log")
-        print(header)
-        print(body)
