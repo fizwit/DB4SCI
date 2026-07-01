@@ -1,6 +1,7 @@
 import json
 
 from sqlalchemy import create_engine, desc
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import scoped_session, sessionmaker
 
 from . import mydb_config
@@ -52,8 +53,16 @@ def init_db():
         return
     from . import models
 
-    Base.metadata.create_all(bind=migrate_engine)
-    print("Initialized migrate database")
+    try:
+        Base.metadata.create_all(bind=migrate_engine)
+        print("Initialized migrate database")
+    except OperationalError as err:
+        print(
+            f"WARNING: could not connect to the migrate database at {MIGRATE_URI!r}: "
+            f"{err.orig if err.orig is not None else err}\n"
+            "Starting without an initialized migrate database. Verify the "
+            "migrate database service is running and reachable, then restart."
+        )
 
 
 def list_container_names():
