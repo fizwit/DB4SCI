@@ -43,6 +43,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy files to container
 ADD *.py /app
+COPY pyproject.toml /app/
 ADD mydb /app/mydb/
 
 # Setup cron for backups

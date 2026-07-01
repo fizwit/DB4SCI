@@ -21,6 +21,13 @@ from .send_mail import send_mail
 client = docker.from_env()
 
 
+def get_service(service_name):
+    try:
+        return client.services.get(service_name)
+    except NotFound:
+        return None
+
+
 def display_volume_list():
     volumes = volume_list()
     header = "{:<40} {:<10} {}".format("Volume", "Driver", "Created")

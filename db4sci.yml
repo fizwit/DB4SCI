@@ -1,13 +1,13 @@
 version: "3.8"
 
 services:
-    dbaas:
-        image: ${github_org}/dbaas:2.0.1
-        hostname: dbaas
+    db4sci:
+        image: ${github_org}/db4sci:2.0.1
+        hostname: db4sci 
         ports:
             - "5008:5000"
         volumes:
-            - dbaas:/data
+            - db4sci:/data
             - /var/run/docker.sock:/var/run/docker.sock
         env_file:
             - .env
@@ -30,7 +30,7 @@ services:
             - "org.fredhutch.github.repo=db4sci"
 
 volumes:
-    dbaas:
+    db4sci:
         driver: ${SWARM_DRIVER}
         driver_opts:
             type: ${SWARM_DRIVER_TYPE}
