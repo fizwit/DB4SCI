@@ -7,6 +7,7 @@ from docker.types import swarm
 
 from mydb import swarm_util
 from sqlalchemy import create_engine, desc
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
@@ -45,25 +46,42 @@ from .models import ActionLog, Backups, Containers, ContainerState, Labels
 def init_db():
     """
     Initialize database schema.
+
+    The admin database may not be reachable at startup (e.g. the service is
+    still coming up, or DNS for its host is not resolvable yet). Rather than
+    letting an OperationalError crash the process and trigger an infinite
+    container restart loop, log a clear warning and start in a degraded state.
     """
     from . import models
 
-    Base.metadata.create_all(bind=engine)
-    if mydb_config.FLASK_DEBUG:
-        print("Initialized production database")
-    state_info = get_container_state(Name="admin_db")
-    if state_info is None:
-        """Add admin_db service if not present"""
-        params = {'backup_freq': 'Daily',
-                  'port': str(mydb_config.base_port - 1),
-                  'Name': 'admin_db',
-                  'dbname': 'admin_db',
-                  'dbengine': 'Postgres',
-                  'username': mydb_config.admins[0],
-                  'description': "DB4SCI admin database"}
-        service = swarm_util.get_service("mydb_admin_db")
-        if service:
-            add_service(service, params)
+    try:
+        Base.metadata.create_all(bind=engine)
+        if mydb_config.FLASK_DEBUG:
+            print("Initialized production database")
+        state_info = get_container_state(Name="admin_db")
+        if state_info is None:
+            """Add admin_db service if not present"""
+            params = {'backup_freq': 'Daily',
+                      'Port': str(mydb_config.base_port - 1),
+                      'Name': 'admin_db',
+                      'dbname': 'admin_db',
+                      'dbengine': 'Postgres',
+                      'username': mydb_config.admins[0],
+                      'description': "DB4SCI admin database"}
+                      'labels': {
+                          'owner': mydb_config.supportPerson,
+                          'contact': mydb_config.supportEmail}
+            }
+            service = swarm_util.get_service("mydb_admin_db")
+            if service:
+                add_service(service, params)
+    except OperationalError as err:
+        print(
+            f"WARNING: could not connect to the admin database at {PROD_URI!r}: "
+            f"{err.orig if err.orig is not None else err}\n"
+            "Starting without an initialized admin database. Verify the "
+            "'mydb_admin_db' service is running and reachable, then restart."
+        )
 
 
 
