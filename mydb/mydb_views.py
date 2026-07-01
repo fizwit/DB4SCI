@@ -167,7 +167,8 @@ def created():
     for item in request.form:
         params[item] = request.form[item].replace(";", "").replace("&", "").strip()
     params["username"] = session["username"]
-    print(f"DEBUG: mydb_views.created dbengine: {params['dbengine']}")
+    if mydb_config.FLASK_DEBUG == '1':
+        print(f"DEBUG: mydb_views.created dbengine: {params['dbengine']}")
     if params["dbengine"] == "Postgres":
         result = postgres_util.create(params)
     elif params["dbengine"] == "MongoDB":

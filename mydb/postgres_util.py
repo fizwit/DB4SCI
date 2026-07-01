@@ -593,39 +593,3 @@ def restore_admin_db():
                 return result_msg
             message += result_msg
     return message
-
-
-def setup_parser():
-    parser = argparse.ArgumentParser(
-        description="postgres_util CLI testing",
-        usage="%(prog)s [options] module_name",
-    )
-    parser.add_argument(
-        "--update-clone",
-        required=False,
-        action="store_true",
-        dest="update",
-        help="Used with --clone; The Cloned container will be the latest available DB version",
-    )
-    parser.add_argument(
-        "--clone",
-        action="store",
-        dest="clone",
-        help='Clone container, new container will have "_01" appended to name',
-    )
-    parser.add_argument(
-        "--shm_size",
-        action="store",
-        dest="shm_size",
-        help="Used with --clone option to set the shared mem size (/dev/shm), int or str, (e.g. 1G)",
-    )
-    parser.add_argument(
-        "--restore_admin", action="store_true", help="Restore the Admin DB from S3"
-    )
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = setup_parser()
-    if args.restore_admin:
-        restore_admin_db()
