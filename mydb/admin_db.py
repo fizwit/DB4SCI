@@ -71,9 +71,9 @@ def init_db():
                     'contact': mydb_config.supportEmail,
                 }
             }
-            service = swarm_util.get_service("mydb_admin_db")
-            if service:
-                image = service.attrs['Spec']['TaskTemplate']['ContainerSpec']['Image'].split('@')[0]
+            service_attrs = swarm_util.get_service("mydb_admin_db")
+            if service_attrs:
+                image = service_attrs['Spec']['TaskTemplate']['ContainerSpec']['Image'].split('@')[0]
                 params['image'] = image
                 add_service(service, params)
     except OperationalError as err:

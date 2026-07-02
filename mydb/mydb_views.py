@@ -48,12 +48,12 @@ def get_template_context():
     """Return common context variables for all templates"""
     return {
         "logo_path": mydb_config.organizationLogo,
-        "org_name": mydb_config.organizationName,
+        "org_name": mydb_config.institutionName,
         "version": __version__,
         "release_date": __release_date__,
-        "organizationName": mydb_config.organizationName,
-        "supportOrganization": mydb_config.supportOrganization,
-        "supportEmail": mydb_config.supportEmail,
+        "institutionName": mydb_config.institutionName,
+        "supportOrgName": mydb_config.supportOrgName,
+        "supportOrgEmail": mydb_config.supportOrgEmail,
     }
 
 
@@ -390,14 +390,13 @@ append admin commands to URL
 /admin/inspect?name=[container name]
 /admin/volume_list/  List Docker Volumes
 /admin/log/  Display all records from ActionLog table
-/admin/info?[name=xx | cid=n]   Display Info data from'
- containers table.
+/admin/info?[name=xx | cid=n]   Display Info data from containers table.
 /admin/containers   Display summary from containers
 /admin/data?cid=n  Display Docker inspect from AdminDB
 /admin/update?cid=n&key=value&...  Update Info with new key: values
 /admin/backup_audit[?name=xx | cid=x]  Display backup audit report for container
 /admin_mode?mode=[on|off]
-/admin/delete_container_state?cid=n
+/admin/delete_container_state?cid=n  Only remove from State table
 /admin/restore_admin_db Restore myd_admin from S3 to migrate_db
 URL encoding tips:  Space: %20, @: %40"""
 
@@ -444,10 +443,11 @@ def admin(cmd):
             "dblist.html", title="Containers Summary", dbheader=header, dbs=body
         )
     elif cmd == "inspect":
+        body = "Container 'name' not found."
         if "name" in args:
-            body = container_util.inspect_container_json(args["name"])
-        else:
-            body = "Hmm, I need a container name to inspect."
+            service_attrs = swarm_util.get_service(args["name"])
+            if service_attrs:
+                body = json.dumps(service_attrs, indent=4)
         return render_template(
             "dblist.html",
             title=f"Docker Inspect for {args['name']}",
@@ -561,16 +561,6 @@ def cron(cmd):
         return body, 204  # No Content
     else:
         return '<h2> invalid command</h2>', 400  # Bad Request
-
-
-@app.route("/certs/<filename>", methods=["GET"])
-@auth_required
-def certs(filename):
-    return send_from_directory(
-        directory=mydb_config.dbaas_path + "/TLS",
-        as_attachment=True,
-        filename=filename + ".pem",
-    )
 
 
 @app.route("/doc_page/")
