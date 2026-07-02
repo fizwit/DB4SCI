@@ -281,7 +281,7 @@ def migrate(info):
     dbname = info["Name"]
     service_name = f"mydb_{dbname}"
 
-    if swarm_util.service_exists(service_name):
+    if swarm_util.get_service(service_name):
         return f"Service name {service_name} already in use"
 
     S3_prefix = aws_util.lastbackup_s3_prefix(dbname, mydb_config.s3_prefix_migrate)
@@ -302,7 +302,7 @@ def migrate(info):
 
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
-        return f"{error} {mydb_config.supportOrganization} has been notified"
+        return f"{error} {mydb_config.supportOrgName} has been notified"
 
     wait_for_mariadb(params["Port"])
     params["Start Mesg"] = f"Started! Service_id: {service.id}"
@@ -330,7 +330,7 @@ def create(params):
     params["service_name"] = f"mydb_{params['Name']}"
     params["volume_name"] = f"mydb_{params['Name']}"
 
-    if swarm_util.service_exists(params["service_name"]):
+    if swarm_util.get_service(params["service_name"]):
         return f"Service name {params['service_name']} already in use"
 
     volume_id, error = swarm_util.create_docker_volume(params["volume_name"])
@@ -355,7 +355,7 @@ def create(params):
 
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
-        return f"{error} {mydb_config.supportOrganization} has been notified"
+        return f"{error} {mydb_config.supportOrgName} has been notified"
 
     wait_for_mariadb(params["Port"])
     res = "Your MariaDB database server has been created. Use the following command "
@@ -369,13 +369,13 @@ def create(params):
         f"MyDB created a new {dbengine} database called: {params['service_name']}\n"
     )
     message += f"Created by: {params['owner']} <{params['contact']}>\n"
-    send_mail(f"MyDB: created {dbengine}", message, mydb_config.supportAdmin)
+    send_mail(f"MyDB: created {dbengine}", message, mydb_config.supportEmail)
     return res
 
 
 def backup(c_id, info, backup_type):
     """Backup all databases for a given MariaDB container
-    mariadb-dump is run from the dbaas container and piped to S3
+    mariadb-dump is run from the <db4sci> container and piped to S3
     """
     Name = info["Name"]
     backup_id, prefix = aws_util.create_backup_prefix(Name)
@@ -417,7 +417,7 @@ def backup(c_id, info, backup_type):
 
     success, msg = backup_util.s3_piped_backup(command, s3_filename)
     if not success:
-        send_mail("MyDB: MariaDB backup error", message, mydb_config.supportAdmin)
+        send_mail("MyDB: MariaDB backup error", message, mydb_config.supportEmail)
 
     # Log backup end
     admin_db.backup_log(

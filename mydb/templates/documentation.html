@@ -9,9 +9,9 @@
   <div class="document">
     <h2>Overview</h2>
     <p>
-    DBaaS allows {{organizationName}} faculty and staff to create stand
+    DBaaS allows {{institutionName}} faculty and staff to create stand
     alone database instances. The database instances are created in docker containers 
-    on a shared server managed by {{supportOrganization}}. You will not have direct access to the file
+    on a shared server managed by {{supportOrgName}}. You will not have direct access to the file
     system but you will have superuser permissions to the database instance.
     <b>Current support for these database servers is minimal. </b>
     Your databases are backed up daily, so in the event of a restore, you may lose up to 24 hours of data. 
@@ -37,7 +37,7 @@
     </ul>
     <p>
     If you have questions about database configuration options and defaults,
-    contact {{supportOrganization}}.
+    contact {{supportOrgName}}.
 
     <p>
     The <b>Create DB Service</b> form prompts for a <b>Docker Service Name</b> and <b>Database Name</b>.
@@ -52,10 +52,10 @@
     administrative rights to the database, so additional accounts can be created if needed.
 
     <b>"DB password"</b> are used to create a database account which will have root privileges for the DB.
-    It is strongly recommended that you do not use your {{organizationName}} password for the database
+    It is strongly recommended that you do not use your {{institutionName}} password for the database
     account. 
 
-    A secondary root account is created by {{supportOrganization}} for the purpose of performing backups.
+    A secondary root account is created by {{supportOrgName}} for the purpose of performing backups.
 
     <h2> Backups </h2>
     Backups are performed after hours nightly if you select the <b>Daily</b> or <b>Weekly</b>
@@ -75,7 +75,7 @@
 
     <h2> Additional functionality or bugs </h2>
     <p>
-    Please report any bugs or submit requests for additional functionality by contacting {{ supportEmail }}.
+    Please report any bugs or submit requests for additional functionality by contacting {{ supportOrgEmail }}.
   </div>
 </div>
 {% endblock %}

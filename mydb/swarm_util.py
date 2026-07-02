@@ -4,7 +4,6 @@ Docker Swarm utility functions for MyDB
 This module contains functions for managing Docker Swarm services.
 """
 
-import base64
 import json
 import sys
 import time
@@ -23,10 +22,10 @@ client = docker.from_env()
 
 def get_service(service_name):
     try:
-        return client.services.get(service_name)
+        service = client.services.get(service_name)
     except NotFound:
         return None
-
+    return service.attrs
 
 def display_volume_list():
     volumes = volume_list()
@@ -185,7 +184,7 @@ def start_service(params, config_ref):
                 send_mail(
                     "MyDB: service failed to start",
                     f"Service {params['Name']} failed: {error_msg}",
-                    mydb_config.supportAdmin,
+                    mydb_config.supportEmail,
                 )
                 return (
                     None,
@@ -375,7 +374,7 @@ def admin_delete(name, username):
 
     # Send notification email
     subject = f"DBaaS: service {'partially' if errors else 'fully'} removed"
-    send_mail(subject, result, mydb_config.supportAdmin)
+    send_mail(subject, result, mydb_config.supportEmail)
 
     return result
 
@@ -383,25 +382,8 @@ def admin_delete(name, username):
 def remove_service(service_name):
     try:
         status = client.service.remove(service_name)
-    except docker.errors.NotFound as e:
-        return "Error"  # jfdey make better
-    return True
-
-
-def inspect_service(service_name) -> dict:
-    """return service meta data.
-    Exmple field: insp.attrs['Spec']['Name']
-    insp.attrs['Spec']['EndpointSpec']['Ports'][0]['PublishedPort']
-    """
-    insp = client.services.get(service_name)
-    return insp.attrs
-
-
-def service_exists(service_name):
-    try:
-        client.services.get(service_name)
     except docker.errors.NotFound:
-        return None
+        return "Error"  # jfdey make better
     return True
 
 
@@ -413,7 +395,7 @@ def docker_config_remove(config_name):
             config.remove()
             return f"Docker Config {config_name} removed."
     except NotFound:
-        return f"Docker config not found."
+        return "Docker config not found."
     except APIError as e:
         return f"Error occurered while removing {config_name}: {e}"
 

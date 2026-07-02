@@ -8,18 +8,18 @@
     <h4> Overview </h4>
   </div>
    <p>
-      This site allows {{organizationName}} faculty and staff to create a database instance. 
+      This site allows {{institutionName}} faculty and staff to create a database instance. 
       There are several database products to select from; Postgres, MariaDB.
       The database instances are created in docker containers
-      on a shared server managed by {{supportOrganization}}. There is no direct access
+      on a shared server managed by {{supportOrgName}}. There is no direct access
       to the container or server.
       All database access is throught the native interface via the network to the database object.
       User accounts have full administrative permissions to the database instance. 
       <b>Current support for these database servers is minimal. </b>
-      {{supportOrganization}} performs database backups for the database instances.
+      {{supportOrgName}} performs database backups for the database instances.
       Database recovery from backups are by request. 
       Data loss can occur within a 24-hour period between backups.
-      If you have questions contact <b>{{supportEmail}}</b>.
+      If you have questions contact <b>{{supportOrgEmail}}</b>.
     </p>
     <p>
     Version: {{version}}  Release: {{release_date}}

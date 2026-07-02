@@ -167,7 +167,7 @@ def migrate(info):
     Use meta data from v1 of mydb to create new docker swarm service
     """
     dbname = info["Name"]
-    if swarm_util.service_exists(dbname):
+    if swarm_util.get_service(dbname):
         return f"Container name {dbname} already in use"
     dump_prefix = aws_util.lastbackup_s3_prefix(dbname, mydb_config.s3_prefix_migrate)
     if dump_prefix[:5] == "Error":
@@ -186,7 +186,7 @@ def migrate(info):
         return "Error: creating Docker Config"
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
-        return f"{error} {mydb_config.supportOrganization} has been notified"
+        return f"{error} {mydb_config.supportOrgName} has been notified"
     params["service_id"] = service.id
     wait_for_postgres(dbname, params["Port"])
     result = pg_restore(params, params, dump_prefix)
@@ -199,11 +199,12 @@ def create(params):
     Called from mydb_views
     params is created from gerneral_form UI
     """
-    data = json.dumps(params, indent=4)
-    print(f"DEBUG: postgres_util.create: params before: {data}")
+    if mydb_config.FLASK_DEBUG:
+        data = json.dumps(params, indent=4)
+        print(f"DEBUG: postgres_util.create: params before: {data}")
     params["service_name"] = f"mydb_{params['Name']}"
     params["volume_name"] = f"mydb_{params['Name']}"
-    if swarm_util.service_exists(params["service_name"]):
+    if swarm_util.get_service(params["service_name"]):
         return f"Container name {params['service_name']} already in use"
     volume_id, error = swarm_util.create_docker_volume(params["volume_name"])
     if error:
@@ -225,7 +226,7 @@ def create(params):
     params["labels"]["touched"] = touched.create_date_string()
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
-        return f"{error} Unable to create your DB service {mydb_config.supportOrganization} has been notified"
+        return f"{error} Unable to create your DB service {mydb_config.supportOrgName} has been notified"
     res = "Your database server has been created. Use the following command "
     res += "to connect from the Linux command line.\n\n"
     res += f"psql -h {mydb_config.container_host} "
@@ -246,7 +247,7 @@ def create(params):
         f"Mydb created a new {dbengine} database called: {params['service_name']}\n"
     )
     message += f"Created by: {params['owner']} <{params['contact']}>\n"
-    send_mail(f"MyDB: created {dbengine}", message, mydb_config.supportAdmin)
+    send_mail(f"MyDB: created {dbengine}", message, mydb_config.supportEmail)
     return res
 
 

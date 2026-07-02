@@ -134,7 +134,7 @@ def migrate(info):
     import time
 
     dbname = info["Name"]
-    if swarm_util.service_exists(dbname):
+    if swarm_util.get_service(dbname):
         return f"Container name {dbname} already in use"
 
     # Create Docker volume
@@ -157,7 +157,7 @@ def migrate(info):
     # Start the service
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
-        return f"{error} {mydb_config.supportOrganization} has been notified"
+        return f"{error} {mydb_config.supportOrgName} has been notified"
 
     params["Start Mesg"] = f"Started! Service_id: {service.id}"
     params["service_id"] = service.id
@@ -224,7 +224,7 @@ def create_mongodb(params):
     params["volume_name"] = f"mydb_{params['Name']}"
 
     # Check if service already exists
-    if swarm_util.service_exists(params["service_name"]):
+    if swarm_util.get_service(params["service_name"]):
         return f"Service name {params['service_name']} already in use"
 
     # Create Docker volume
@@ -254,7 +254,7 @@ def create_mongodb(params):
     # Start the service
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
-        return f"{error} {mydb_config.supportOrganization} has been notified"
+        return f"{error} {mydb_config.supportOrgName} has been notified"
 
     # Build response message
     res = "Your MongoDB database server has been created.\n\n"
@@ -270,7 +270,7 @@ def create_mongodb(params):
         f"MyDB created a new {dbengine} database called: {params['service_name']}\n"
     )
     message += f"Created by: {params['owner']} <{params['contact']}>\n"
-    send_mail(f"MyDB: created {dbengine}", message, mydb_config.supportAdmin)
+    send_mail(f"MyDB: created {dbengine}", message, mydb_config.supportEmail)
 
     return res + connection
 

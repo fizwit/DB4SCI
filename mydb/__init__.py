@@ -33,9 +33,9 @@ def inject_branding():
 
     return {
         "logo_path": mydb_config.organizationLogo,
-        "org_name": mydb_config.organizationName,
-        "supportEmail": mydb_config.supportEmail,
-        "supportOrganization": mydb_config.supportOrganization,
+        "org_name": mydb_config.institutionName,
+        "supportOrgEmail": mydb_config.supportOrgEmail,
+        "supportOrgName": mydb_config.supportOrgName,
         "backup_purge_period": mydb_config.backup_purge_period,
     }
 
