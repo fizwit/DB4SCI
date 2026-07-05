@@ -406,7 +406,7 @@ def check_backup_logs(info, c_id):
 
 
 def backup_report(c_id, name):
-    data = admin_db.get_container_data(name, c_id)
+    data = admin_db.get_container_data(c_id)
     header = "Backup report for {}".format(data["Info"]["Name"])
     if c_id is None:
         state_info = admin_db.get_container_state(name)
@@ -430,7 +430,7 @@ def backup_audit_all():
     )
     msg = ""
     for c_id, con_name in containers:
-        data = admin_db.get_container_data("", c_id)
+        data = admin_db.get_container_data(c_id)
         if "backup_freq" in data["Info"]:
             policy = data["Info"]["backup_freq "]
         else:
@@ -466,7 +466,7 @@ def backup_all():
     print(msg)
     containers = admin_db.list_active_containers()
     for c_id, con_name in containers:
-        data = admin_db.get_container_data("", c_id)
+        data = admin_db.get_container_data(c_id)
         info = data["Info"]
         print(f"Back_all: contaner: {con_name} {info}")
         # backup_freq': 'Daily',

@@ -1,3 +1,5 @@
+from ldap3 import NONE
+
 from flask import render_template, session
 
 from . import (
@@ -118,7 +120,7 @@ def migrate_actions(action, args):
             result=result,
         )
     elif action == "migrate_info":
-        json_data = migrate_db.display_container_info(container_name)
+        json_data = migrate_db.display_container_info(container_name,None)
         print(f"DEBUG {__file__}.migrate_info\n{json_data}")
         return render_template(
             "action_result.html",
@@ -158,9 +160,10 @@ def user_backup(Name):
     page: <select_container> action: backup
     Name: Container name
     """
-    (cid, info) = admin_db.get_container_info(Name)
-    if cid is None:
+    state = admin_db.get_container_state(Name)
+    if state is None:
         return f"Database container not found: {Name}"
+    data = admin_db.get_container_data(state.c_id)
     info["cid"] = cid
     if info["dbengine"] == "Postgres":
         result = postgres_util.backup(info, "User")
@@ -184,12 +187,12 @@ def container_info(container_name, admin):
         state_info = admin_db.get_container_state(container_name)
         if not state_info:
             return f"Error: Container: {container_name} not found in AdminDB", {}
-        data = admin_db.get_container_data("", state_info.c_id)
+        data = admin_db.get_container_data(state_info.c_id)
     elif admin == "migrate":
         state_info = migrate_db.get_container_state(container_name)
         if not state_info:
             return f"Error: Container: {container_name} not found in MigrateDB", {}
-        data = migrate_db.get_container_data("", state_info.c_id)
+        data = migrate_db.get_container_data(state_info.c_id)
     else:
         return "Error: Invalid admin parameter", {}
 
@@ -211,7 +214,7 @@ def restart_con(con_name, dbuser, dbuserpass, username, admin_log=True):
     state_info = admin_db.get_container_state(con_name)
     if not state_info:
         return "Error: Container not found"
-    data = admin_db.get_container_data("", state_info.c_id)
+    data = admin_db.get_container_data(state_info.c_id)
     info = data["Info"]
     # Standard key is dbengine
     dbengine = info.get("dbengine", "Unknown")
@@ -245,7 +248,7 @@ def auth_delete(Name, dbuser, dbuserpass, username):
     state_info = admin_db.get_container_state(Name)
     if not state_info:
         return "Error: Container not found"
-    data = admin_db.get_container_data("", state_info.c_id)
+    data = admin_db.get_container_data(state_info.c_id)
     info = data["Info"]
     # Standard key is dbengine
     dbengine = info.get("dbengine", "Unknown")
