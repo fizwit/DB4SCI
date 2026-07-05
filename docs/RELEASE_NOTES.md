@@ -2,10 +2,13 @@
 
 #### Version 2.0.4.3 Jul 1, 2026
 
-    - Improve Config
-organizationName -> institutionName= "Your University"
-supportOrganization -> supportOrgName = "folks who support this App"
-supportEmail -> supportOrgEmail = "HPC-help@university.edu"
+ - refactor admin_db.get_container_state(container_name)
+ - refactor admin_db.get_container_data(container_id)
+
+ - Improve readablity of Config
+organizationName -> institutionName= "Your Univercity"
+supportOrganization -> supportOrgName = "support group at Univercity"
+supportEmail -> supportOrgEmail = "HPC-help@univercity.edu"
 
 supportPerson ->  supportStaff = ["Jane Doe", "Fred"]
 supportAdmin  ->  supportEmail = ["jdoe@univercity.edu"]
