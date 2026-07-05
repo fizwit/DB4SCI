@@ -133,7 +133,7 @@ def display_active_containers():
     body = ""
     counter = 0
     for c_id in cid_list:
-        data = get_container_data("", c_id)
+        data = get_container_data(c_id)
         info = data["Info"]
         started = data["State"]["StartedAt"]
         human = human_uptime(started)
@@ -170,25 +170,16 @@ def display_active_containers():
     return (header, body)
 
 
-def get_container_data(con_name, c_id=None):
-    """return list of dicts
-    list of <data> field (JSONB) from containers table as dict
-    data field contains 'Info'
+def get_container_data(c_id):
+    """ return <data> from JSON record of `Containers` table.
     """
     if not db_session:
         raise ValueError("Migrate database not configured.")
-    if c_id:
-        result = db_session.query(Containers).filter(Containers.id == c_id).all()
+    result = db_session.query(Containers).filter(Containers.id == c_id).first()
+    if result:
+        return result.data
     else:
-        result = (
-            db_session.query(Containers)
-            .filter(Containers.data["Name"].astext == "/" + con_name)
-            .all()
-        )
-    if isinstance(result, list) and len(result) > 0:
-        return result[0].data
-    else:
-        return []
+        return None
 
 
 def display_container_info(con_name, c_id=None):
@@ -196,7 +187,7 @@ def display_container_info(con_name, c_id=None):
     if con_name:
         state = get_container_state(con_name=con_name)
         c_id = state.c_id
-    data = get_container_data("", c_id=c_id)
+    data = get_container_data(c_id)
     return json.dumps(data["Info"], indent=4)
 
 
@@ -291,7 +282,7 @@ def display_email_list():
     cid_list = [containers[c_id][0] for c_id in range(len(containers))]
     emails = {}
     for c_id in cid_list:
-        data = get_container_data("", c_id)
+        data = get_container_data(c_id)
         info = data["Info"]
         started = data["State"]["StartedAt"]
         started_h = human_uptime(started)

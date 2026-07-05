@@ -160,13 +160,8 @@ def start_service(params, config_ref):
         labels=params["labels"],
     )
 
-    time.sleep(1)
-    # Basic attributes
-    print(f"Service ID: {service.id}")
-    print(f"Service Name: {service.name}")
-    print(f"Service short ID: {service.short_id}")
-
     # Wait for service to have running tasks
+    time.sleep(1)
     timeout = 30  # seconds
     start_time = time.time()
 
@@ -177,7 +172,7 @@ def start_service(params, config_ref):
             task = tasks[0]
             if task["Status"]["State"] == "running":
                 print(f"Service {params['Name']} is running")
-                c_id = admin_db.add_service(service, params)
+                c_id = admin_db.add_service(service.attrs, params)
                 return service, "Service Started"
             elif task["Status"]["State"] in ["failed", "shutdown", "rejected"]:
                 error_msg = task["Status"].get("Err", "Unknown error")
@@ -253,7 +248,7 @@ def restart_service(name):
     if state_info is None:
         return f"Error: Container '{name}' not found in Admin DB"
 
-    data = admin_db.get_container_data("", c_id=state_info.c_id)
+    data = admin_db.get_container_data(state_info.c_id)
     if "Info" not in data or "service_name" not in data["Info"]:
         return f"Error: Service name not found for container '{name}'"
 
@@ -298,7 +293,7 @@ def admin_delete(name, username):
     if state_info is None:
         return f"ERROR: Unable to find {name} in Admin DB. Cannot proceed without metadata.\n"
 
-    data = admin_db.get_container_data("", c_id=state_info.c_id)
+    data = admin_db.get_container_data(state_info.c_id)
     service_name = data["Info"].get("service_name", f"mydb_{name}")
     volume_name = data["Info"].get("volume_name", f"mydb_{name}")
     config_name = data["Info"].get("config_name", f"mydb_{name}_init.sql")

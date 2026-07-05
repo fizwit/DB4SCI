@@ -64,6 +64,7 @@ def init_db():
                 'Name': 'admin_db',
                 'dbname': 'admin_db',
                 'dbengine': 'Postgres',
+                'dbuser': mydb_config.admins[0],
                 'username': mydb_config.admins[0],
                 'description': "DB4SCI admin database",
                 'labels': {
@@ -75,7 +76,7 @@ def init_db():
             if service_attrs:
                 image = service_attrs['Spec']['TaskTemplate']['ContainerSpec']['Image'].split('@')[0]
                 params['image'] = image
-                add_service(service, params)
+                add_service(service_attrs, params)
     except OperationalError as err:
         print(
             f"WARNING: could not connect to the admin database at {PROD_URI!r}: "
@@ -137,7 +138,7 @@ def display_container_log(c_id=None, limit=None):
 Container State table manages active containers. New records are added when
 containers are created. Records are deleted when the container is deleted.
     CREATE add_container_state()
-    READ get_container_state(con_name, c_id)
+    READ get_container_state(con_name)
     UPDATE update_container_state()
     DELETE delete_container_state():
     Note: Docker container names begin with a backslash '\' data['Name']
@@ -174,17 +175,11 @@ def list_container_names():
     return containers
 
 
-def get_container_state(Name=None, c_id=None):
-    """Get current state of a container
-    returns (state, c_id)
-    None if not found
+def get_container_state(Name=None):
+    """Get current state of a container from 'state' table
+    returns None if not found
     """
-    if c_id is not None:
-        state_info = ContainerState.query.filter(ContainerState.c_id == c_id).first()
-    elif Name:
-        state_info = ContainerState.query.filter(ContainerState.name == Name).first()
-    else:
-        state_info = None
+    state_info = ContainerState.query.filter(ContainerState.name == Name).first()
     return state_info
 
 
@@ -211,11 +206,14 @@ def delete_container_state(c_id):
     """Delete record from Container_State table.
     Deleted Containers are not tracked in Container State
     """
-    u = ContainerState.query.filter(ContainerState.c_id == c_id).delete()
+    u = ContainerState.query.filter(ContainerState.c_id == int(c_id)).delete()
     db_session.commit()
+    if u == 0:
+        print(f"WARNING: delete_container_state -no ContainerState row found for CID {c_id}; nothing deleted")
+        return u
     description = f"deleted CID {c_id} by user admin"
-    add_container_log(c_id, "unknown", "delete-state", description)
-
+    add_container_log(c_id, "Admin", "delete-state", description)
+    return u
 
 def list_containers():
     """Return python list of all containers in container table
@@ -257,7 +255,7 @@ def get_max_port():
     state_info = ContainerState.query.all()
 
     for state in state_info:
-        data = get_container_data("", c_id=state.c_id)
+        data = get_container_data(state.c_id)
         if data and "Info" in data and "Port" in data["Info"]:
             try:
                 ports.append(int(data["Info"]["Port"]))
@@ -305,22 +303,22 @@ Relation between <id> and <c_id between all other tables.
 """
 
 
-def add_service(service, params):
+def add_service(service_attrs, params):
     """Add new container to admin database
-    input: Docker inspect from container
+    input: Docker inspect attributes (dict) from container
     Info block is added to Docker Inspect and stored as JSONB
     in the <data> column of table containers.
     """
     Info = copy.deepcopy(params)
     Info["State"] = "running"
     # Info["Port"] = service.attrs["Endpoint"]["Ports"][0]["TargetPort"]
-    Info["PublishedPort"] = service.attrs["Endpoint"]["Ports"][0]["PublishedPort"]
-    Info["CreatedAt"] = service.attrs["CreatedAt"]
+    Info["PublishedPort"] = service_attrs["Endpoint"]["Ports"][0]["PublishedPort"]
+    Info["CreatedAt"] = service_attrs["CreatedAt"]
     Info["LastState"] = "created"
     print(f"DEBUG: {__file__}.add_service: {json.dumps(Info, indent=4)}")
 
     # Convert service.attrs to plain dict and add our custom fields
-    data = dict(service.attrs)
+    data = dict(service_attrs)
     data["Info"] = Info
     u = Containers(data=data, name=Info["Name"])
     flag_modified(u, "data")
@@ -336,49 +334,19 @@ def delete_container(id):
     Remove from container_state also
     """
     delete_container_state(id)
-    u = Containers.query.filter(Containers.id == id).delete()
+    u = Containers.query.filter(Containers.id == int(id)).delete()
     db_session.commit()
 
 
-def get_container_data(con_name, c_id=None):
-    """return list of dicts
-    list of <data> field (JSONB) from containers table as dict
-    data field contains 'Info'
+def get_container_data(c_id):
+    """return 'data' field from containers table
+    <c_id> Container ID must be int
     """
-    if c_id:
-        result = Containers.query.filter(Containers.id == c_id).all()
+    result = Containers.query.filter(Containers.id == c_id).first()
+    if result:
+        return result.data
     else:
-        result = Containers.query.filter(
-            Containers.data["Info"]["Name"].astext == con_name
-        ).all()
-    if isinstance(result, list) and len(result) > 0:
-        retrieved_data = result[0].data
-        if "Info" not in retrieved_data:
-            print(
-                f"WARNING: 'Info' key missing from data for c_id={result[0].id}, name={con_name}"
-            )
-            print(f"Available keys: {list(retrieved_data.keys())}")
-        return retrieved_data
-    else:
-        return []
-
-
-def get_container_info(Name) -> tuple:
-    """get container info data
-    return tuple
-    dbengine:  'Postgres', 'MariaDB', 'MongoDB', 'Neo4j' etc
-    """
-    state_info = get_container_state(Name=Name)
-    if state_info:
-        data = get_container_data("", c_id=state_info.c_id)
-        c_id = state_info.c_id
-        info = data["Info"]
-        # Standard key is dbengine
-        dbengine = info.get("dbengine", "")
-    else:
-        c_id = None
-        info = {}
-    return (c_id, info)
+        return None
 
 
 def update_container_info(c_id, info_data, who=None):
@@ -402,16 +370,19 @@ def update_container_info(c_id, info_data, who=None):
     return result.data
 
 
-def display_container_info(con_name, c_id=None):
+def display_container_info(container_name, cid):
     """Return pretty json of 'Info' from container table"""
-    if con_name:
-        state = get_container_state(Name=con_name)
-    if state:
-        c_id = state.c_id
-        data = get_container_data("", c_id=c_id)
+    if container_name:
+        state = get_container_state(container_name)
+        if state:
+            cid = state.c_id
+        else:
+            return f"No data for {container_name} from get_container_state"
+    data = get_container_data(cid)
+    if data:
         return json.dumps(data["Info"], indent=4)
     else:
-        return f"Meta data not found for {con_name}"
+        return f"Meta data not found for container_name: {container_name} c_id: {cid}"
 
 
 def display_containers():
@@ -496,7 +467,7 @@ def display_email_list():
     cid_list = [active[c_id][0] for c_id in range(len(active))]
     emails = {}
     for c_id in cid_list:
-        data = get_container_data("", c_id)
+        data = get_container_data(c_id)
         info = data["Info"]
         started = data["State"]["StartedAt"]
         started_h = human_uptime(started)
@@ -513,7 +484,7 @@ def display_email_list():
 
 def display_active_containers():
     """Return summary of running containers.
-    This should be used from the GUI
+    called from mydb_views
     """
     widths = (3, 24, 15, 24, 30, 6, 30, 25)
     header_text = (
@@ -532,7 +503,7 @@ def display_active_containers():
     body = ""
     counter = 0
     for c_id in cid_list:
-        data = get_container_data("", c_id)
+        data = get_container_data(c_id)
         print(f"data: {data}")
         info = data["Info"]
         started = data["CreatedAt"]

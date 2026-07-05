@@ -269,7 +269,7 @@ def selected():
             header=container_name + " S3 Backup Objects",
         )
     elif action == "admin_metadata":
-        json_data = admin_db.display_container_info(container_name)
+        json_data = admin_db.display_container_info(container_name, cid=None)
         print(f"DEBUG {__file__}.admin_metadata\n{json_data}")
         return render_template(
             "action_result.html",
@@ -380,24 +380,23 @@ def list_from_migrate():
 def admin_help():
     body = """
 MyDB administrators must be added to mydb_config.admins.
-append admin commands to URL
+
 /admin/help/   Your reading it.
 /admin/session_info Display session variables
 /admin/email_list Create JSON output of all users grouped by email
-/admin/state/  Display all records in State table
-/admin/list Display running containers
-/admin/docker_ps Docker ps ouput
-/admin/inspect?name=[container name]
+/admin/list_state Simple list from State table
+/admin/list_containers List all items in Container table
+/admin/inspect?name=[container name]  Docker service inspect
 /admin/volume_list/  List Docker Volumes
-/admin/log/  Display all records from ActionLog table
-/admin/info?[name=xx | cid=n]   Display Info data from containers table.
-/admin/containers   Display summary from containers
-/admin/data?cid=n  Display Docker inspect from AdminDB
-/admin/update?cid=n&key=value&...  Update Info with new key: values
+/admin/migrate_s3_prefix?name=ServiceName - List last backups from Mirgrate prefix
 /admin/backup_audit[?name=xx | cid=x]  Display backup audit report for container
-/admin_mode?mode=[on|off]
+/admin/log/  Display all records from ActionLog table
+/admin/container_data?cid=n  data field from containers table
+/admin/update?cid=n&key=value&...  Update Info with new key: values
+/admin/mode?mode=[on|off]
 /admin/delete_container_state?cid=n  Only remove from State table
-/admin/restore_admin_db Restore myd_admin from S3 to migrate_db
+/admin/services - Display all Swam Services
+/admin/delete_container_state?cid=N
 URL encoding tips:  Space: %20, @: %40"""
 
     return body
@@ -407,125 +406,89 @@ URL encoding tips:  Space: %20, @: %40"""
 @auth_required
 @admin_required
 def admin(cmd):
-    args = {}
-    for arg_key in request.args.keys():
-        args[arg_key] = request.args[arg_key]
-
+    name = cid = None
+    if 'name' in request.args:
+        name = request.args['name']
+    if 'cid' in request.args:
+        cid = int(request.args['cid'])
+    render_page = "dblist.html"
+    header = f"Administrative Function: {cmd}"
     if cmd == "help":
+        title = "MyDB Administrative Features"
         body = admin_help()
-        title = "MyDB Administrative Features\n"
-        return render_template("dblist.html", title=title, dbheader="", dbs=body)
     elif cmd == "session_info":
         return render_template("session.html", title="Session Variables")
     elif cmd == "restore":
+        title = "Restore Database from Backup"
         container_names = migrate_db.list_container_names()
-        return render_template(
-            "restore.html", title="Restore Database from Backup", items=container_names
-        )
+        return render_template("restore.html", title=title, items=container_names)
     elif cmd == "email_list":
+        title="List Users Email"
         (header, body) = admin_db.display_email_list()
-        return render_template(
-            "dblist.html", title="List Users Email", dbheader=header, dbs=body
-        )
-    elif cmd == "state":
-        (header, body) = admin_db.display_container_state()
-        return render_template(
-            "dblist.html", title="Admin DB State Table", dbheader=header, dbs=body
-        )
-    elif cmd == "list":
-        (header, body) = admin_db.display_active_containers()
-        return render_template(
-            "dblist.html", title="Active Containers", dbheader=header, dbs=body
-        )
-    elif cmd == "containers":
-        (header, body) = admin_db.display_containers()
-        return render_template(
-            "dblist.html", title="Containers Summary", dbheader=header, dbs=body
-        )
+    elif cmd == "list_state":
+        title = "List containers in state table"
+        list_from_state = admin_db.list_active_containers()
+        body = '\n'.join(', '.join([str(row[0]), row[1]]) for row in list_from_state)  # one line per inner list
+    elif cmd == "list_containers":
+        title = "Container Summary"
+        list_of_containers = admin_db.list_containers()
+        body = '\n'.join(', '.join([str(row[0]), row[1]]) for row in list_of_containers)
     elif cmd == "inspect":
-        body = "Container 'name' not found."
-        if "name" in args:
-            service_attrs = swarm_util.get_service(args["name"])
+        title = f"Docker Inspect for {name}"
+        body = f"Container '{name}' not found."
+        if name:
+            service_attrs = swarm_util.get_service(name)
             if service_attrs:
                 body = json.dumps(service_attrs, indent=4)
-        return render_template(
-            "dblist.html",
-            title=f"Docker Inspect for {args['name']}",
-            dbheader="",
-            dbs=body,
-        )
     elif cmd == "volume_list":
+        title = "Docker Swarm Volumes"
         header, body = swarm_util.display_volume_list()
-        return render_template(
-            "dblist.html", title="Docker Volumes", dbheader=header, dbs=body
-        )
     elif cmd == "migrate_s3_prefix":
-        """ return the s3 prefix for the most current backup"""
-        if "name" in args:
-            body = migrate_db.lastbackup_s3_prefix(args["name"])
-        else:
-            body = "Please tell me what the container name is. ?name=name"
-        print(f"{__file__} cid: {args['name']}")
-        return render_template(
-            "dblist.html",
-            title=f"S3 Prefix for last 'prod' backup of {args['name']}",
-            dbs=body,
-        )
+        title = f"S3 Prefix for last 'prod' backup of {name}"
+        body = "Please tell me what the container name is. ?name=name"
+        if name:
+            body = migrate_db.lastbackup_s3_prefix(name)
     elif cmd == "backup_all":
+        title = "Backup All"
         body = backup_util.backup_all()
-        return render_template(
-            "dblist.html", title="Backup All", dbheader="", dbs=body
-        )
     elif cmd == "backup_audit":
         title = f"Backup AuditReport for prefix:{mydb_config.s3_prefix_prod}"
-        if "name" in args:
-            (header, body) = backup_util.backup_audit(args["name"])
-        elif "cid" in args:
-            (header, body) = backup_util.backup_audit(cid=args["cid"])
+        if name:
+            (header, body) = backup_util.backup_audit(name)
+        elif cid:
+            (header, body) = backup_util.backup_audit(cid)
         else:
             (header, body) = backup_util.backup_audit()
-        return render_template("dblist.html", title=title, dbheader=header, dbs=body)
     elif cmd == "log":
+        title = "Admin DB Log"
         (header, body) = admin_db.display_container_log()
-        return render_template(
-            "dblist.html", title="Admin DB Log", dbheader=header, dbs=body
-        )
-    elif cmd == "data":
-        data = admin_db.get_container_data(args["name"], cid)
-        body = json.dumps(data, indent=4)
-        title = "Container Inspect from admindb"
-        return render_template("dblist.html", title=title, dbheader="", dbs=body)
-    elif cmd == "info":
-        body = admin_db.display_container_info(args["name"], cid)
-        title = "Container Info "  # for %s' % body['Name']
-        return render_template("dblist.html", title=title, dbheader="", dbs=body)
+    elif cmd == "container_data":
+        title = f"Container data field from container table. cid: {cid}"
+        body = admin_db.display_container_info(None, cid)
     elif cmd == "update":
         info = {}
         for item in request.args.keys():
             if "cid" != item:
                 info[item] = request.args[item]
-        if "cid" in request.args and len(info.keys()) > 0:
-            admin_db.update_container_info(request.args["cid"], info)
-            return "Updated Info\n" + json.dumps(info, indent=4)
+        if cid and len(info.keys()) > 0:
+            admin_db.update_container_info(cid, info)
+            body = "Updated Info\n" + json.dumps(info, indent=4)
         else:
-            return "DEBUG: admin-update: No URL arguments"
-    elif cmd == "restore_admin_db":
-        result = postgres_util.restore_admin_db()
-        title = "Restore mydb_admin from S3 to migrate_db"
-        return render_template(
-            "dblist.html", title=title, dbheader="pg_dump output", dbs=result
-        )
+            body = "DEBUG: admin-update: No URL arguments"
     elif cmd == "services":
-        header, body = swarm_util.display_services()
         title = "MyDB Admin Services"
-        return render_template("dblist.html", title=title, dbheader=header, dbs=body)
+        header, body = swarm_util.display_services()
     elif cmd == "delete_container_state":
-        """ Only removes the Metadata from admin_db """
-        admin_db.delete_container_state(request.args["cid"])
-        return "Administratively removed meta data from admin_db"
+        title = f'Only remove the Metadata from admin_db cid = {args["cid"]}'
+        status = admin_db.delete_container_state(cid)
+        if status:
+            body = "Administratively removed meta data from admin_db"
+        else:
+            body = "hmm, had issues removing meta data."
     else:
-        return "incorect admin URL" + cmd
-
+        title = "Command not found"
+        body = f"unknown /admin command {cmd}"
+    return render_template(render_page, title=title, dbheader=header, dbs=body)
 
 @app.route("/admin_mode/")
 @auth_required
