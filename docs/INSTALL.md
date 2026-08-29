@@ -89,7 +89,7 @@ organizationName = "Your Organization"
 supportOrganization = "IT Support Team"
 supportEmail = "support@yourorg.org"
 supportPerson = "Your Name"
-supportAdmin = ["admin@yourorg.org"]
+supportAdmin_email = ["admin@yourorg.org"]
 backup_admin_mail = ["backup-alerts@yourorg.org"]
 ```
 

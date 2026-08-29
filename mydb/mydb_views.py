@@ -7,7 +7,6 @@ from flask import (
     redirect,
     render_template,
     request,
-    send_from_directory,
     session,
     url_for,
 )
@@ -15,6 +14,7 @@ from flask import (
 from . import app
 
 # from . import mongodb_util
+from .errors import AppError
 from . import (
     AD_auth,
     admin_db,
@@ -115,6 +115,13 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
+def register_error_handlers(app):
+    @app.errorhandler(AppError)
+    def handle_app_error(err: AppError):
+        cause = err.__cause__  # the excption chained with "from e"
+        details = str(cause) if cause is not None else str(err)
+        return render_template("error.html", message=str(err), details=details)
+
 
 @app.route("/list_containers/")
 @auth_required
@@ -123,7 +130,6 @@ def list_containers():
     return render_template(
         "dblist.html", title="Active Containers", dbheader=header, dbs=body
     )
-
 
 @app.route("/migrate_email")
 @auth_required

@@ -432,7 +432,7 @@ def backup_audit_all():
     for c_id, con_name in containers:
         data = admin_db.get_container_data(c_id)
         if "backup_freq" in data["Info"]:
-            policy = data["Info"]["backup_freq "]
+            policy = data["Info"]["backup_freq"]
         else:
             msg += "Extreme Badness: Backup policy not set for %s.\n" % con_name
             continue

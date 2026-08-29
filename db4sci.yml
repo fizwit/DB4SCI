@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
     db4sci:
-        image: ${github_org}/db4sci:2.0.1
+        image: ${org_repo_name}/db4sci:2.0.1
         hostname: db4sci 
         ports:
             - "5008:5000"
@@ -24,6 +24,9 @@ services:
             AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION}" 
             SQLALCHEMY_ADMIN_URI: "${SQLALCHEMY_ADMIN_URI}"
             SQLALCHEMY_MIGRATE_URI: "${SQLALCHEMY_MIGRATE_URI}"
+            PG_ADMIN: "${PG_ADMIN}"
+            PG_ADMIN_PASS: "${PG_ADMIN_PASS}"
+
         labels:
             - "org.fredhutch.app.owner=jfdey@fredhutch.org"
             - "org.fredhutch.description=MyDB DBaaS Application"

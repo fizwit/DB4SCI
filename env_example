@@ -3,13 +3,6 @@
 # cp env_example .env
 
 # =============================================================================
-# Support and Notifications
-# =============================================================================
-
-# Email address for administrative notifications and alerts
-supportAdmin="admin@example.org"
-
-# =============================================================================
 # Flask Application Settings
 # =============================================================================
 
@@ -21,18 +14,27 @@ FLASK_DEBUG=0
 # Generate a strong random key: python -c 'import secrets; print(secrets.token_urlsafe(32))'
 FLASK_SECRET='CHANGE_ME_TO_A_RANDOM_SECRET_KEY'
 
+# TASK_TOKEN is used to authenticate cron jobs, passed via http headers
+# Future AWS update creds
+DB4SCI_TASK_TOKEN=backup-N-admin_Stuff26
+
 # =============================================================================
 # PostgreSQL Admin Database Credentials
 # =============================================================================
 
 # MyDB admin database user (for production admin database)
 MYDB_ADMIN_USER='mydbadmin'
+# MyDB migrate database password (for migration/staging database)
+MYDB_MIGRATE_PASSWORD='CHANGE_ME_MIGRATE_PASSWORD'
 
 # MyDB admin database password (for production admin database)
 MYDB_ADMIN_PASSWORD='CHANGE_ME_ADMIN_PASSWORD'
 
-# MyDB migrate database password (for migration/staging database)
-MYDB_MIGRATE_PASSWORD='CHANGE_ME_MIGRATE_PASSWORD'
+# Postgres admin account - Copy from mydb_config.py Postgres`admin` and `admin_pass`
+PG_ADMIN=pgdba
+PG_ADMIN_PASS="fhpsqladmin"
+maria_admin="root"
+maria_admin_pass="fhmariaadmin"
 
 # =============================================================================
 # SQLAlchemy Database Connection Strings
@@ -51,15 +53,31 @@ SQLALCHEMY_MIGRATE_URI="postgresql+psycopg://mydbadmin:CHANGE_ME_MIGRATE_PASSWOR
 # MyDB Container Host Configuration
 # =============================================================================
 
-# Environment identifier ('prod', 'dev', 'test') 
-DBAAS_ENV='prod'
-
 # Hostname where MyDB and database containers run
 # This is the publicly accessible hostname that users will connect to
-DBAAS_HOST=mydb-host
+DB4SCI_HOST=mydb-host
 
 # Domain name for the MyDB host
-DBAAS_DOMAIN=example.org
+DB4SCI_DOMAIN=example.org
+
+# =============================================================================
+# Docker Swarm Storage Options
+# =============================================================================
+# I use a single node swarm for testing, but production uses shared NFS storage
+
+# Driver type ['local']
+SWARM_DRIVER=local
+
+# Driver type ['none', 'nfs']
+SWARM_DRIVER_TYPE=none
+
+#  Option for local is just "bind", For NFS use the service address 'addr=192.168.1.100,rw'
+SWARM_OPTS=bind
+
+# Device: for local use "/var/tmp/". NFS provide the export path: ":/exports/mydata"
+# sudo mkdir /var/tmp/mydb/admin_db
+# sudo mkdir /var/tmp/mydb/migrate_db
+SWARM_DEVICE=/var/tmp/mydb
 
 # =============================================================================
 # Active Directory / LDAP Authentication
@@ -83,12 +101,19 @@ ADSearchBase="dc=example,dc=org"
 # Format: s3://bucket-name
 AWS_BUCKET_NAME="s3://your-org-mydb-backups"
 
+# AWS_BAKCUP_PREFIX -> string
+# prefix For AWS backups - Do not mix production and development backups!
+# ['prod', 'dev', 'etc']
+AWS_BACKUP_PREFIX='dev'
+
 # AWS IAM credentials with S3 access
 # Required permissions: s3:PutObject, s3:GetObject, s3:ListBucket
-AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+AWS_ACCESS_KEY_ID=AWKBARFFOOBAREXAMPLE
 
 # AWS secret access key (keep this secure!)
 AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+AWS_DEFAULT_REGION=eu-central-2
 
 # =============================================================================
 # Email Configuration (Optional)
@@ -105,6 +130,12 @@ AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 # MAIL_TO=dba-team@example.org,backup-alerts@example.org
 
 # =============================================================================
+# Docker Private Repo name
+# =============================================================================
+#
+org_repo_name=registry.institute.edu
+
+# =============================================================================
 # Additional Notes
 # =============================================================================
 #
@@ -114,15 +145,11 @@ AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 #    - Rotate credentials regularly
 #    - Use IAM roles instead of AWS keys when possible
 #
-# 2. Docker Secrets:
-#    After configuring .env, create Docker secrets with:
-#    ./dbaas_secrets.sh
-#
-# 3. Testing Configuration:
+# 2. Testing Configuration:
 #    Validate your configuration before deployment:
-#    source .env && echo "DBAAS_HOST: $DBAAS_HOST"
+#    source .env && echo "DB4SCI_HOST: $DB4SCI_HOST"
 #
-# 4. URL Encoding:
+# 3. URL Encoding:
 #    Special characters in passwords must be URL-encoded for SQLAlchemy:
 #    @  -> %40
 #    #  -> %23

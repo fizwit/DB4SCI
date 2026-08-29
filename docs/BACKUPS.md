@@ -80,7 +80,7 @@ The next best method to inspect backup files is to look at the **AWS S3** bucket
 
 **Email notifications:**
 
-The `backup_all.py` script sends email notifications to addresses configured in `mydb_config.supportAdmin` upon completion or errors.
+The `backup_all.py` script sends email notifications to addresses configured in `mydb_config.supportAdmin_email` upon completion or errors.
 
 ## MyDB Admin Database Backups
 

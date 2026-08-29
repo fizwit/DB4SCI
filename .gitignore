@@ -29,3 +29,5 @@ setup.cfg
 .mydb_venv
 setup.cfg
 dbaas_resolved.yml
+.venv
+TODO

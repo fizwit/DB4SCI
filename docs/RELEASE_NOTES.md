@@ -2,6 +2,11 @@
 
 #### Version 2.0.4.3 Jul 1, 2026
 
+ - Only use one admin account per database type. ie, all PostgreSQL use the PG_ADMIN_PASS,
+   earlier version used a seperate account just for the admin_db.
+ - swarm_util.py target_path, should always be defined
+ - replace `dbaas` with `db4sci` in docs/OPERATIONS.md
+ - add `LDAPOperationsErrorResult` to LDAP login
  - refactor admin_db.get_container_state(container_name)
  - refactor admin_db.get_container_data(container_id)
 
@@ -11,7 +16,7 @@ supportOrganization -> supportOrgName = "support group at Univercity"
 supportEmail -> supportOrgEmail = "HPC-help@univercity.edu"
 
 supportPerson ->  supportStaff = ["Jane Doe", "Fred"]
-supportAdmin  ->  supportEmail = ["jdoe@univercity.edu"]
+supportAdmin_email  ->  supportEmail = ["jdoe@univercity.edu"]
 backup_admin_mail = ["backup_admin@univercity.edu"]
 
 #### Version 2.0.4  Jun 2026
