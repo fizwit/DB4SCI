@@ -1,21 +1,20 @@
-import argparse
 import json
 import sys
 import time
 from pathlib import Path
 
 import psycopg
-from jinja2 import Template
 
 from . import (
     admin_db,
     aws_util,
     backup_util,
-    mydb_config,
+    postgres_hash,
     swarm_util,
     touched,
 )
 from .send_mail import send_mail
+from postgres_hash import postgres_hash
 
 dbengine = "Postgres"
 
@@ -40,8 +39,8 @@ def pg_admin_connect(dbname, port):
     try:
         conn = psycopg.connect(
             host=mydb_config.container_host,
-            user=mydb_config.accounts[dbengine]["admin"],
-            password=mydb_config.accounts[dbengine]["admin_pass"],
+            user=mydb_config.pg_admin,
+            password=mydb_config.pg_admin_pass,
             port=port,
             dbname=dbname,
         )
@@ -73,25 +72,26 @@ def create_init_script(params):
      <create_type> = ['new', 'migrate', 'retore']
     """
 
-    sql_init_script = """-- Create Role
-CREATE ROLE {{dbuser}} WITH LOGIN PASSWORD '{{dbuserpass}}';
-ALTER USER {{dbuser}} WITH SUPERUSER;
+    password_hash = postgres_hash(params['dbuserpass'])
+    dbuser = params['dbuser']
+    dbname = params['dbname']
+    sql_init_script = f"""-- Create Role
+CREATE ROLE {dbuser} WITH LOGIN PASSWORD '{password_hash}';
+ALTER USER {dbuser} WITH SUPERUSER;
 
 -- Create Database
-CREATE DATABASE "{{dbname}}";
+CREATE DATABASE "{dbname}";
 
 -- Grant privileges
-GRANT ALL PRIVILEGES ON DATABASE "{{dbname}}" TO {{dbuser}};
+GRANT ALL PRIVILEGES ON DATABASE "{dbname}" TO {dbuser};
 
 """
 
-    template = Template(sql_init_script)
-    rendered_output = template.render(params)
-    params["config_name"] = f"mydb_{params['Name']}_init.sql"
-    target_path = "/docker-entrypoint-initdb.d/init.sql"
-    config_ref = swarm_util.create_config(params, rendered_output, target_path)
+    data = sql_init_script.encode("utf-8")
+    config_name = f"mydb_{params['Name']}_init.sql"
+    params["config_name"] = config_name
+    config_ref = swarm_util.create_config(config_name, data)
     return config_ref
-
 
 def wait_for_postgres(dbname, port):
     """Wait for PostgreSQL to be ready"""
@@ -110,14 +110,15 @@ def wait_for_postgres(dbname, port):
 
 
 def pg_env(auth_meth=None) -> list:
-    """create Postgres Env"""
+    """create Postgres Env
+    search TDE for encryption at rest
+    """
     env = [
-        f"POSTGRES_USER={mydb_config.accounts[dbengine]['admin']}",
-        f"POSTGRES_PASSWORD={mydb_config.accounts[dbengine]['admin_pass']}",
+        f"POSTGRES_USER={mydb_config.pg_admin}",
+        f"POSTGRES_PASSWORD={mydb_config.pg_admin_pass}",
         "POSTGRES_DB=postgres",
+        f"POSTGRES_INITDB_ARGS=--file-encryption-method=256",
     ]
-    if auth_meth == "md5":
-        env.append("POSTGRES_INITDB_ARGS=--auth-host=md5")
     env.append(f"TZ={mydb_config.TZ}")
     return env
 
@@ -173,17 +174,14 @@ def migrate(info):
     if dump_prefix[:5] == "Error":
         return dump_prefix
     volume_name = f"mydb_{dbname}"
-    volume_id, error = swarm_util.create_docker_volume(volume_name)
-    if error:
-        return r"Error creatinge docker volume {volume_name}. Error: {error}"
+    swarm_util.create_docker_volume(volume_name)
     params = build_params_postgres(info)
     params["service_name"] = f"mydb_{dbname}"
     params["volume_name"] = volume_name
     # meta_data = json.dumps(params, indent=4)
     # print(f"DEBUG: postgres_util.migrate: {dbname}\nMeta data for container recovery: {meta_data}")
     config_ref = create_init_script(params)
-    if config_ref is None:
-        return "Error: creating Docker Config"
+
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
         return f"{error} {mydb_config.supportOrgName} has been notified"
@@ -210,8 +208,6 @@ def create(params):
     if error:
         return f"Error creatinge docker volume {params['volume_name']}. Error: {error}"
     config_ref = create_init_script(params)
-    if config_ref is None:
-        return "Error: creating Docker Config"
 
     config_data = mydb_config.info[dbengine]
     params["mapped_db_vol"] = config_data["mapped_volume"]
@@ -267,10 +263,10 @@ def backup(c_id, info, backup_type):
     pg_dumpall_cmd = "pg_dumpall -g "
     pg_dumpall_cmd += f"--host {mydb_config.container_host} "
     pg_dumpall_cmd += f"--port {info['Port']} "
-    pg_dumpall_cmd += f"-U {mydb_config.accounts[dbengine]['admin']}"
+    pg_dumpall_cmd += f"-U {mydb_config.pg_admin}"
 
     # Set PGPASSWORD environment variable for pg_dumpall
-    env = {"PGPASSWORD": mydb_config.accounts[dbengine]["admin_pass"]}
+    env = {"PGPASSWORD": mydb_config.pg_admin_pass}
 
     # Log backup start
     admin_db.backup_log(
@@ -303,8 +299,8 @@ def backup(c_id, info, backup_type):
     try:
         connection = psycopg.connect(
             host=mydb_config.container_host,
-            user=mydb_config.accounts[dbengine]["admin"],
-            password=mydb_config.accounts[dbengine]["admin_pass"],
+            user=mydb_config.pg_admin,
+            password=mydb_config.pg_admin_pass,
             port=info["Port"],
             dbname="postgres",
         )
@@ -335,7 +331,7 @@ def backup(c_id, info, backup_type):
         pg_dump_cmd += "--lock-wait-timeout=5000 "
         pg_dump_cmd += f"--host {mydb_config.container_host} "
         pg_dump_cmd += f"--port {info['Port']} "
-        pg_dump_cmd += f"--username {mydb_config.accounts[dbengine]['admin']} "
+        pg_dump_cmd += f"--username {mydb_config.pg_admin} "
         pg_dump_cmd += "-F c"
 
         # Use common S3 piped backup function with environment variables
@@ -517,12 +513,12 @@ def pg_restore(source, dest, S3_prefix):
             result_msg = f" s3 objects: {base_file}..."
     psql_cmd = (f"psql --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
-        f"--dbname postgres -U {mydb_config.accounts[dbengine]['admin']}")
+        f"--dbname postgres -U {mydb_config.pg_admin}")
     pg_restore = (f"pg_restore --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
-        f"-U {mydb_config.accounts[dbengine]['admin']} --dbname XXXX "
+        f"-U {mydb_config.pg_admin} --dbname XXXX "
         "--clean --if-exists --format=c ")
-    password_env = {"PGPASSWORD": mydb_config.accounts[dbengine]["admin_pass"]}
+    password_env = {"PGPASSWORD": mydb_config.pg_admin_pass}
 
     # Run SQL command file
     SQL_file = None

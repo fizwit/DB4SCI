@@ -1,6 +1,6 @@
-# MyDB - Database as a Service for Scientists
+# DB4Sci - Database as a Service for Scientists
 
-MyDB is a self-service database provisioning platform that enables researchers to create and manage their own database instances on demand. Built on Docker Swarm, MyDB automates database lifecycle management including creation, backups, and monitoring.
+DB4Sci is a self-service database provisioning platform that enables researchers to create and manage their own database instances on demand. Built on Docker Swarm, DB4Sci automates database lifecycle management including creation, backups, and monitoring.
 
 ## Key Features
 
@@ -17,7 +17,7 @@ Each database instance is:
 - Backed by persistent Docker volumes
 
 ### Automated Backup Management
-MyDB handles all backup operations automatically:
+DB4Sci handles all backup operations automatically:
 - Scheduled automated backups to AWS S3
 - User-initiated on-demand backups via web UI
 - Complete backup history and audit trail
@@ -40,7 +40,7 @@ MyDB handles all backup operations automatically:
 
 ## Architecture
 
-MyDB is a Python Flask application that manages Docker Swarm services. Each database instance runs as an independent Swarm service with:
+DB4Sci is a Python Flask application that manages Docker Swarm services. Each database instance runs as an independent Swarm service with:
 - **Persistent storage** via Docker volumes
 - **Initialization scripts** via Docker configs
 - **Isolated networking** with exposed ports
@@ -74,7 +74,7 @@ See [INSTALL.md](INSTALL.md) for complete installation instructions.
 
 ## Use Cases
 
-MyDB is designed for research environments where:
+DB4Sci is designed for research environments where:
 - Scientists need temporary or project-specific databases
 - Self-service database provisioning reduces IT bottlenecks
 - Automated backups ensure data safety without manual intervention
@@ -83,7 +83,7 @@ MyDB is designed for research environments where:
 
 ## Authentication
 
-MyDB uses Active Directory for user authentication by default. The authentication module (`mydb/AD_auth.py`) is self-contained and can be replaced with alternative authentication methods (OAuth, SAML, local accounts, etc.) without modifying core application logic.
+DB4Sci uses Active Directory for user authentication by default. The authentication module (`mydb/AD_auth.py`) is self-contained and can be replaced with alternative authentication methods (OAuth, SAML, local accounts, etc.) without modifying core application logic.
 
 ## License
 

@@ -1,0 +1,14 @@
+{% extends "main_menu.html" %}
+{% block title %} Error Page {% endblock %}
+{% block head %} {{ super() }}{% endblock %}
+{% block content %}
+<div id="container">
+    <div class="title"> <h4>Error</h4> </div>
+    <div class="sub_title"> <h4> {{ message }} </h4></div>
+    <div id="content">
+    <code><pre>
+{{details}}
+    </pre></code>
+    </div> <!-- content -->
+</div> <!-- container -->
+{% endblock %}

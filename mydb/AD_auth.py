@@ -6,7 +6,7 @@ import sys
 from ldap3 import ALL, SIMPLE, SUBTREE, SYNC, Connection, Server
 from ldap3.core.exceptions import (
     LDAPException,
-    LDAPInvalidCredentialsResult,
+    LDAPOperationsErrorResult,
     LDAPSocketOpenError,
     LDAPSocketSendError,
 )
@@ -75,12 +75,12 @@ def is_valid(username: str, password: str):
             search_scope=SUBTREE,
             attributes=Attrs,
         )
-    except (LDAPSocketOpenError, LDAPSocketSendError) as e:
+    except (LDAPOperationsErrorResult, LDAPSocketOpenError, LDAPSocketSendError) as e:
         print(f"LDAP search error: {e}", file=sys.stderr)
         return "Error", info
     if not sync or ldap_conn.result["result"] != 0:
         print(f"LDAP Search result: {ldap_conn.result}")
-        return ("LDAP Search Error", info)
+        return ("Error", info)
 
     """ print response from ldap3 search """
     if len(ldap_conn.entries) == 0:
@@ -94,7 +94,6 @@ def is_valid(username: str, password: str):
             if k == "uid":
                 k = "username"
             if k == "displayName":
-                displayname = v
                 if ", " in v:
                     (last, first) = v.split(", ", 1)
                     v = "{} {}".format(first, last)

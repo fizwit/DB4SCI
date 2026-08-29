@@ -173,7 +173,7 @@ Audit Complete
 docker service ls
 
 # Expected output should show:
-# - mydb_dbaas (Flask application)
+# - mydb_db4sci (Flask application)
 # - mydb_admin (Admin PostgreSQL database)
 # - mydb_migrate (Migration PostgreSQL database)
 ```
@@ -181,8 +181,8 @@ docker service ls
 ### Check Specific MyDB Services
 
 ```bash
-# Check dbaas service (Flask app)
-docker service ps mydb_dbaas
+# Check db4sci service (Flask app)
+docker service ps mydb_db4sci
 
 # Check admin database service
 docker service ps mydb_admin
@@ -195,10 +195,10 @@ docker service ps mydb_migrate
 
 ```bash
 # Detailed inspection of a service
-docker service inspect mydb_dbaas --pretty
+docker service inspect mydb_db4sci --pretty
 
 # Check number of replicas running
-docker service ls --filter name=mydb_dbaas
+docker service ls --filter name=mydb_db4sci
 
 # Should show: REPLICAS 1/1 (or your configured replica count)
 ```
@@ -211,13 +211,13 @@ docker service ls --filter name=mydb_dbaas
 
 ```bash
 # Get detailed JSON output
-docker service inspect mydb_dbaas
+docker service inspect mydb_db4sci
 
 # View service configuration
-docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' mydb_dbaas
+docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' mydb_db4sci
 
 # View environment variables
-docker service inspect --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' mydb_dbaas | jq
+docker service inspect --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' mydb_db4sci | jq
 ```
 
 ### List All User Database Services
@@ -234,7 +234,7 @@ docker service ls --filter name=mydb_ --format "{{.Name}}" | wc -l
 
 ```bash
 # Restart the Flask application
-docker service update --force mydb_dbaas
+docker service update --force mydb_db4sci
 
 # Restart admin database (careful - causes downtime!)
 docker service update --force mydb_admin
@@ -250,24 +250,24 @@ docker service update --force mydb_<container_name>
 ### View Service Logs
 
 ```bash
-# View dbaas application logs (last 100 lines)
-docker service logs mydb_dbaas --tail 100
+# View db4sci application logs (last 100 lines)
+docker service logs mydb_db4sci --tail 100
 
 # Follow logs in real-time
-docker service logs --follow mydb_dbaas
+docker service logs --follow mydb_db4sci
 
 # View logs from last hour
-docker service logs mydb_dbaas --since 1h
+docker service logs mydb_db4sci --since 1h
 
 # View logs with timestamps
-docker service logs mydb_dbaas --timestamps
+docker service logs mydb_db4sci --timestamps
 ```
 
 ### View Container Logs
 
 ```bash
 # Find the container ID for a service
-docker ps --filter "name=mydb_dbaas"
+docker ps --filter "name=mydb_db4sci"
 
 # View container logs directly
 docker logs <container_id>
@@ -282,14 +282,14 @@ docker logs --tail 50 --timestamps <container_id>
 ### Search Logs for Errors
 
 ```bash
-# Search for errors in mydb_dbaas logs
-docker service logs mydb_dbaas 2>&1 | grep -i error
+# Search for errors in mydb_db4sci logs
+docker service logs mydb_db4sci 2>&1 | grep -i error
 
 # Search for specific database errors
-docker service logs mydb_dbaas 2>&1 | grep -i "postgres\|database"
+docker service logs mydb_db4sci 2>&1 | grep -i "postgres\|database"
 
 # Export logs to file for analysis
-docker service logs mydb_dbaas > /tmp/dbaas_logs_$(date +%Y%m%d_%H%M%S).log
+docker service logs mydb_db4sci > /tmp/db4sci_logs_$(date +%Y%m%d_%H%M%S).log
 ```
 
 ---
@@ -370,8 +370,8 @@ PGPASSWORD="${MYDB_MIGRATE_PASSWORD}"  psql --host sc-build-02 --port 32008 -d m
 ### Get Shell Access to a Container
 
 ```bash
-# Get bash shell in dbaas Flask container
-docker exec -it $(docker ps -q -f name=mydb_dbaas) /bin/bash
+# Get bash shell in db4sci Flask container
+docker exec -it $(docker ps -q -f name=mydb_db4sci) /bin/bash
 
 # Get shell in a PostgreSQL service
 docker exec -it $(docker ps -q -f name=mydb_<container_name>) /bin/bash
@@ -552,16 +552,16 @@ WHERE state = 'running';
 
 ```bash
 # Check service status
-docker service ps mydb_dbaas --no-trunc
+docker service ps mydb_db4sci --no-trunc
 
 # Look for error messages in task history
-docker service ps mydb_dbaas --format "{{.Error}}"
+docker service ps mydb_db4sci --format "{{.Error}}"
 
 # Check recent logs
-docker service logs mydb_dbaas --tail 100
+docker service logs mydb_db4sci --tail 100
 
 # Verify configuration
-docker service inspect mydb_dbaas --pretty
+docker service inspect mydb_db4sci --pretty
 ```
 
 ### Database Connection Failures
@@ -582,14 +582,14 @@ docker service logs mydb_<container_name> --tail 50
 
 ```bash
 # Check if Flask process is running
-docker exec $(docker ps -q -f name=mydb_dbaas) ps aux | grep python
+docker exec $(docker ps -q -f name=mydb_db4sci) ps aux | grep python
 
 # Test from inside container
-docker exec $(docker ps -q -f name=mydb_dbaas) \
+docker exec $(docker ps -q -f name=mydb_db4sci) \
   curl http://localhost:5000/
 
 # Check for port binding issues
-docker exec $(docker ps -q -f name=mydb_dbaas) netstat -tlnp
+docker exec $(docker ps -q -f name=mydb_db4sci) netstat -tlnp
 ```
 
 ### Out of Disk Space
@@ -613,13 +613,13 @@ docker system df -v | grep mydb_
 
 ```bash
 # Restart Flask application
-docker service update --force mydb_dbaas
+docker service update --force mydb_db4sci
 
 # Wait for health check
 sleep 10
 
 # Verify it's running
-docker service ps mydb_dbaas | grep Running
+docker service ps mydb_db4sci | grep Running
 ```
 
 ### Export All Container Metadata (Disaster Recovery)
@@ -639,17 +639,17 @@ aws s3 cp /tmp/mydb_admin_backup_*.sql s3://your-backup-bucket/disaster-recovery
 
 ```bash
 # Service status check
-docker service ls --filter name=mydb_dbaas
+docker service ls --filter name=mydb_db4sci
 docker service ls --filter name=mydb_admin
 docker service ls --filter name=mydb_migrate
 
 # Quick log check (all services)
-docker service logs mydb_dbaas --tail 20
+docker service logs mydb_db4sci --tail 20
 docker service logs mydb_admin --tail 20
 docker service logs mydb_migrate --tail 20
 
 # Container health
-docker ps --filter name=mydb_dbaas
+docker ps --filter name=mydb_db4sci
 docker ps --filter name=mydb_admin
 docker ps --filter name=mydb_migrate
 
@@ -677,35 +677,35 @@ python -m mydb.test_postgres
 python -m mydb.test_mariadb
 
 # 3. Build new Docker image
-./build_dbaas.sh
+./build_db4sci.sh
 
-# This creates: dbaas:2.0.1 (or your current version)
+# This creates: db4sci:2.0.1 (or your current version)
 # Verify the build succeeded:
-docker images | grep dbaas
+docker image ls | grep db4sci
 
 # 4. Tag the image for your registry
 # Option A: Using DockerHub
-docker tag dbaas:2.0.1 yourusername/dbaas:2.0.1
+docker tag db4sci:2.0.1 yourusername/db4sci:2.0.1
 
 # Option B: Using a private registry
-docker tag dbaas:2.0.1 your-registry.com/dbaas:2.0.1
+docker tag db4sci:2.0.1 your-registry.com/db4sci:2.0.1
 
 # 5. Push to Docker registry
 # Option A: DockerHub
-docker push yourusername/dbaas:2.0.1
+docker push yourusername/db4sci:2.0.1
 
 # Option B: Private registry
-docker push your-registry.com/dbaas:2.0.1
+docker push your-registry.com/db4sci:2.0.1
 
 # 6. Update the running service
 # This pulls the new image and restarts the service
-docker service update --image yourusername/dbaas:2.0.1 mydb_dbaas
+docker service update --image yourusername/db4sci:2.0.1 mydb_db4sci
 
 # 7. Monitor the update
-docker service ps mydb_dbaas
+docker service ps mydb_db4sci
 
 # 8. Verify the service is running with new code
-docker service logs mydb_dbaas --tail 50 --follow
+docker service logs mydb_db4sci --tail 50 --follow
 ```
 
 ### Quick Update (Development)
@@ -714,13 +714,13 @@ For rapid iteration in development:
 
 ```bash
 # Build and update in one step
-./build_dbaas.sh && \
-docker tag dbaas:2.0.1 yourusername/dbaas:2.0.1 && \
-docker push yourusername/dbaas:2.0.1 && \
-docker service update --image yourusername/dbaas:2.0.1 mydb_dbaas
+./build_db4sci.sh && \
+docker tag db4sci:2.0.1 yourusername/db4sci:2.0.1 && \
+docker push yourusername/db4sci:2.0.1 && \
+docker service update --image yourusername/db4sci:2.0.1 mydb_db4sci
 
 # Monitor logs
-docker service logs -f mydb_dbaas
+docker service logs -f mydb_db4sci
 ```
 
 ### Rollback to Previous Version
@@ -729,13 +729,13 @@ If the update causes issues:
 
 ```bash
 # View update history
-docker service ps mydb_dbaas --no-trunc
+docker service ps mydb_db4sci --no-trunc
 
 # Rollback to previous version
-docker service rollback mydb_dbaas
+docker service rollback mydb_db4sci
 
 # Or manually specify a previous image version
-docker service update --image yourusername/dbaas:2.0.0 mydb_dbaas
+docker service update --image yourusername/db4sci:2.0.0 mydb_db4sci
 ```
 
 ### Zero-Downtime Updates (Production)
@@ -747,8 +747,8 @@ For production updates with minimal downtime:
 docker service update \
   --update-parallelism 1 \
   --update-delay 10s \
-  --image yourusername/dbaas:2.0.1 \
-  mydb_dbaas
+  --image yourusername/db4sci:2.0.1 \
+  mydb_db4sci
 
 # This updates one replica at a time with 10 second delay
 # Users experience minimal disruption
@@ -758,13 +758,13 @@ docker service update \
 
 ```bash
 # Check service is running
-docker service ps mydb_dbaas | grep Running
+docker service ps mydb_db4sci | grep Running
 
 # Test the web interface
 curl -I http://your-host:5000/
 
 # Check application version in logs
-docker service logs mydb_dbaas 2>&1 | grep -i version
+docker service logs mydb_db4sci 2>&1 | grep -i version
 
 # Verify database connections still work
 # Create a test database through the web UI
@@ -782,31 +782,31 @@ docker login
 docker login your-registry.com
 
 # Verify image exists in registry
-docker search yourusername/dbaas
+docker search yourusername/db4sci
 ```
 
 #### Issue: Service doesn't restart
 
 ```bash
 # Force update even if image appears unchanged
-docker service update --force --image yourusername/dbaas:2.0.1 mydb_dbaas
+docker service update --force --image yourusername/db4sci:2.0.1 mydb_db4sci
 
 # Check for errors
-docker service ps mydb_dbaas --no-trunc
+docker service ps mydb_db4sci --no-trunc
 ```
 
 #### Issue: New code not reflected
 
 ```bash
 # Verify image was actually rebuilt with new code
-docker image inspect dbaas:2.0.1 | grep Created
+docker image inspect db4sci:2.0.1 | grep Created
 
 # Check if old image is cached
-docker image ls dbaas
+docker image ls db4sci
 
 # Remove old images and rebuild
-docker image rm dbaas:2.0.1
-./build_dbaas.sh
+docker image rm db4sci:2.0.1
+./build_db4sci.sh
 ```
 
 ### Update Checklist

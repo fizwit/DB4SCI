@@ -15,6 +15,7 @@ from docker.types import ConfigReference, EndpointSpec, Mount, RestartPolicy
 from . import admin_db, mydb_config
 from .human import human_uptime
 from .send_mail import send_mail
+from .errors import AppError
 
 # Initialize Docker client
 client = docker.from_env()
@@ -62,17 +63,14 @@ def create_docker_volume(vname):
     """
     try:
         volume = client.volumes.get(vname)
-        return volume.id, None  # Volume already exists, no error
+        return # Volume already exists, no error
     except docker.errors.NotFound:
+        # volume not found, create it
         try:
             volume = client.volumes.create(vname)
-            return volume.id, None  # Volume created successfully, no error
+            return  # Volume created successfully, no error
         except docker.errors.APIError as e:
-            return None, f"Error creating volume: {e}"
-    except docker.errors.APIError as e:
-        return None, f"Error checking volume: {e}"
-    except Exception as e:
-        return None, f"Unexpected error: {e}"
+            raise AppError("Error: creating docker volume") from e
 
 
 def volume_remove(vname):
@@ -97,7 +95,7 @@ def volume_remove(vname):
     return mesg
 
 
-def create_config(params, config, target_path=None):
+def create_config(config_name, data):
     """Create Docker Swarm config for service initialization
 
     Args:
@@ -109,17 +107,14 @@ def create_config(params, config, target_path=None):
     Returns:
         List of ConfigReference objects or None on error
     """
-    if target_path is None:
-        target_path = "/docker-entrypoint-initdb.d/init.sql"
+    existing_configs = client.configs.list()
+    if config_name in existing_configs:
+        raise AppError(f"docker config exists: {config_name}")
 
     try:
-        config_obj = client.configs.create(
-            name=params["config_name"], data=config.encode("utf-8")
-        )
+        config_obj = client.configs.create(name=config_name, data=data)
     except docker.errors.APIError as e:
-        print(f"create_config: error: {e}", file=sys.stderr)
-        return None
-    params["config_id"] = config_obj.id
+        raise AppError(f"creating docker config: {config_name}") from e
     config_ref = [
         ConfigReference(
             config_id=config_obj.id,

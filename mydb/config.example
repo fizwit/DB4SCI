@@ -33,7 +33,7 @@ organizationName = "Your Organization"
 supportOrgName = "IT Support"
 supportEmail = "support@yourorg.edu"
 supportPerson = "Your Name"
-supportAdmin = ["admin@yourorg.edu"]
+supportAdmin_email = ["admin@yourorg.edu"]
 backup_admin_mail = ["backup-alerts@yourorg.edu"]
 
 # =============================================================================

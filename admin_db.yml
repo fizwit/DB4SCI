@@ -5,8 +5,8 @@ services:
     volumes:
       - admin_db:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: ${MYDB_ADMIN_USER}
-      POSTGRES_PASSWORD: "${MYDB_ADMIN_PASSWORD}"
+      POSTGRES_USER: ${PG_ADMIN}
+      POSTGRES_PASSWORD: "${PG_ADMIN_PASS}"
       POSTGRES_DB: 'mydb_admin'
     labels:
       'BACKUP_FREQ': 'Daily'
