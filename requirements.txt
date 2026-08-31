@@ -11,6 +11,7 @@ pymongo>=4.14.5
 mariadb
 cffi
 cryptography
+pycryptodome
 pycparser
 pyOpenSSL
 pytz

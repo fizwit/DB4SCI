@@ -117,7 +117,8 @@ def pg_env(auth_meth=None) -> list:
         f"POSTGRES_USER={mydb_config.pg_admin}",
         f"POSTGRES_PASSWORD={mydb_config.pg_admin_pass}",
         "POSTGRES_DB=postgres",
-        f"POSTGRES_INITDB_ARGS=--file-encryption-method=256",
+        "POSTGRES_INITDB_ARGS=--data-encryption "
+        "--file-encryption-method=AES256"
     ]
     env.append(f"TZ={mydb_config.TZ}")
     return env
