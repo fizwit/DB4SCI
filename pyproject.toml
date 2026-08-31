@@ -25,6 +25,7 @@ dependencies = [
     "mariadb",
     "cffi",
     "cryptography",
+    "pycryptodome",
     "pycparser",
     "pyOpenSSL",
     "pytz",
