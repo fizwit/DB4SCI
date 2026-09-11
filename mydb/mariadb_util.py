@@ -20,6 +20,9 @@ from .send_mail import send_mail
 
 """
 TLS tutorial: https://www.cyberciti.biz/faq/how-to-setup-mariadb-ssl-and-secure-connections-from-clients/
+containers start with environment variables
+MARIADB_ROOT_PASSWORD
+Can also create a separate non-root user (set MARIADB_USER and MARIADB_PASSWORD
 """
 
 dbengine = "MariaDB"
@@ -71,23 +74,23 @@ def create_init_script(params):
     MariaDB initialization scripts in /docker-entrypoint-initdb.d/ are executed
     automatically when the container starts for the first time (when data directory is empty).
     """
-
-    sql_init_script = """-- Create Database
-CREATE DATABASE IF NOT EXISTS `{{dbname}}`;
+    dbuser = params['dbuser']
+    dbname = params['dbname']
+    dbuserpass = params['dbuserpass']
+    sql_init_script = f"""-- Create Database
+CREATE DATABASE IF NOT EXISTS `{dbname}`;
 
 -- Create User
-CREATE USER IF NOT EXISTS '{{dbuser}}'@'%' IDENTIFIED BY '{{dbuserpass}}';
+CREATE USER IF NOT EXISTS '{dbuser}'@'%' IDENTIFIED BY '{dbuserpass}';
 
 -- Grant privileges
-GRANT ALL PRIVILEGES ON `{{dbname}}`.* TO '{{dbuser}}'@'%' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON `{dbname}`.* TO '{dbuser}'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 """
-
-    template = Template(sql_init_script)
-    rendered_output = template.render(params)
-    params["config_name"] = f"mydb_{params['Name']}_init.sql"
-    target_path = "/docker-entrypoint-initdb.d/init.sql"
-    config_ref = swarm_util.create_config(params, rendered_output, target_path)
+    data = sql_init_script.encode("utf-8")
+    config_name = f"mydb_{params['Name']}_init.sql"
+    params["config_name"] = config_name
+    config_ref = swarm_util.create_config(config_name, data)
     return config_ref
 
 

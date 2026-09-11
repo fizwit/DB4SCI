@@ -3,7 +3,19 @@ import hashlib
 import hmac
 import os
 
-""" create SCRAM-SHA-256 hashed password for creating User account """
+"""
+Lets use encrypted form of Postgres Passwords for account creation.  Postgres 9 used
+md5 hashed passwords.  These need to be updated when migrating to PostgreSQL >17
+
+create SCRAM-SHA-256 hashed password for creating User account
+
+refernce for password hash
+https://github.com/pgjdbc/pgjdbc/blob/master/pgjdbc/src/main/java/org/postgresql/util/PasswordUtil.java
+
+public class PasswordUtil {
+  private static final int DEFAULT_ITERATIONS = 4096;
+  private static final int DEFAULT_SALT_LENGTH = 16;
+"""
 
 
 def _hi(password: str, salt: bytes, iterations: int) -> bytes:
@@ -25,6 +37,7 @@ def postgres_hash(password: str, rounds: int = 4096) -> str:
     Returns a PostgreSQL stored verifier string for scram-sha-256:
       SCRAM-SHA-256$<rounds>:<salt_b64>$<stored_key_b64>:<server_key_b64>
       rounds = 4096   # PosgreSQL 17 and 18
+      PostgrSQL > 17 salt is 16 bytes
     """
     salt = os.urandom(16)
     salted_password = _hi(password, salt, rounds)  # SaltedPassword

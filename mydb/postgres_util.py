@@ -9,12 +9,12 @@ from . import (
     admin_db,
     aws_util,
     backup_util,
-    postgres_hash,
+    mydb_config,
     swarm_util,
     touched,
 )
+from .postgres_hash import postgres_hash
 from .send_mail import send_mail
-from postgres_hash import postgres_hash
 
 dbengine = "Postgres"
 

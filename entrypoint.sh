@@ -15,5 +15,5 @@ export MYDB_AWS_DEFAULT_REGION=us-west-2
 printenv | grep -v "no_proxy" > /etc/environment
 
 # Execute the main command (Flask app)
-echo "Starting Flask application..."
+echo "Starting DB4Sci application..."
 exec "$@"
