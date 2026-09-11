@@ -12,7 +12,8 @@ import docker
 from docker.errors import APIError, NotFound
 from docker.types import ConfigReference, EndpointSpec, Mount, RestartPolicy
 
-from . import admin_db, mydb_config
+from . import mydb_config as cfg
+from . import admin_db
 from .human import human_uptime
 from .send_mail import send_mail
 from .errors import AppError
@@ -27,6 +28,16 @@ def get_service(service_name):
     except NotFound:
         return None
     return service.attrs
+
+
+def get_volume(volume_id):
+    try:
+        volume = client.volumes.get(volume_id)
+        return volume.attrs["Name"]
+    except NotFound:
+        return None
+    except APIError as e:
+        raise AppError(f"Swarm volumes.get {volume_id} - APIError: {e}")
 
 def display_volume_list():
     volumes = volume_list()
@@ -57,20 +68,28 @@ def volume_list():
 
 def create_docker_volume(vname):
     """create a volume if it does not exist
-    Returns: (volume_id, error) tuple
+    Returns: volume_id
         - If successful: (volume_id, None)
         - If error: (None, error_message)
+    raise AppError on Error
     """
+    volume_id = get_volume(vname)
+    if volume_id:
+        raise AppError(f"Docker volumes.get error: Volume {vname} Exists, cleanup before resusing")
+
     try:
-        volume = client.volumes.get(vname)
-        return # Volume already exists, no error
-    except docker.errors.NotFound:
-        # volume not found, create it
-        try:
-            volume = client.volumes.create(vname)
-            return  # Volume created successfully, no error
-        except docker.errors.APIError as e:
-            raise AppError("Error: creating docker volume") from e
+        volume_id = client.volumes.create(
+            name=vname,
+            driver=cfg.SWARM_DRIVER,
+            driver_opts={
+                "type": cfg.SWARM_TYPE,
+                "o": cfg.SWARM_OPTS,
+                "device": f"{cfg.SWARM_DEVICE}/{vname}",
+                },
+            labels={"createdby": "DB4SCI"})
+    except APIError as e:
+        raise AppError(f"Error creating docker volume: {vname}\n{e}")
+    return volume_id
 
 
 def volume_remove(vname):
@@ -95,12 +114,13 @@ def volume_remove(vname):
     return mesg
 
 
-def create_config(config_name, data):
+def create_config(config_name: str, data: str,
+    target_path: str = "/docker-entrypoint-initdb.d/init.sql") -> list:
     """Create Docker Swarm config for service initialization
 
     Args:
-        params: Dictionary containing config_name and other parameters
-        config: String content of the config file
+        config_name: String Name of config file
+        data: String: sql init script encoded as utf-8
         target_path: Optional path where config should be mounted in container.
                     Defaults to /docker-entrypoint-initdb.d/init.sql for PostgreSQL
 
@@ -113,16 +133,16 @@ def create_config(config_name, data):
 
     try:
         config_obj = client.configs.create(name=config_name, data=data)
-    except docker.errors.APIError as e:
+    except APIError as e:
         raise AppError(f"creating docker config: {config_name}") from e
     config_ref = [
         ConfigReference(
             config_id=config_obj.id,
-            config_name=params["config_name"],
+            config_name=config_obj.name,
             filename=target_path,
             uid="999",
             gid="999",
-            mode=0o555,
+            mode=0o444,
         )
     ]
     return config_ref
@@ -174,7 +194,7 @@ def start_service(params, config_ref):
                 send_mail(
                     "MyDB: service failed to start",
                     f"Service {params['Name']} failed: {error_msg}",
-                    mydb_config.supportEmail,
+                    cfg.supportEmail,
                 )
                 return (
                     None,
@@ -364,7 +384,7 @@ def admin_delete(name, username):
 
     # Send notification email
     subject = f"DBaaS: service {'partially' if errors else 'fully'} removed"
-    send_mail(subject, result, mydb_config.supportEmail)
+    send_mail(subject, result, cfg.supportEmail)
 
     return result
 

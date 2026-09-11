@@ -61,10 +61,11 @@ db.createUser({
 
 """
     template = Template(init_user_js)
-    rendered_output = template.render(params)
-    params["config_name"] = f"mydb_{params['Name']}_init_user.js"
+    data = template.render(params).encode('utf-8')
+    config_name = f"mydb_{params['Name']}_init_user.js"
+    params["config_name"] = config_name
     target_path = "/docker-entrypoint-initdb.d/init_user.js"
-    return swarm_util.create_config(params, rendered_output, target_path)
+    return swarm_util.create_config(config_name, data, target_path)
 
 
 def mongo_env(dbname):
