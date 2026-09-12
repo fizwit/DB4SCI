@@ -291,9 +291,7 @@ def migrate(info):
     print(f"DEBUG: mariadb_util.migrate S3_prefix: {S3_prefix}")
 
     volume_name = f"mydb_{dbname}"
-    volume_id, error = swarm_util.create_docker_volume(volume_name)
-    if error:
-        return f"Error creating docker volume {volume_name}. Error: {error}"
+    swarm_util.create_docker_volume(volume_name)
 
     params = build_params_mariadb(info)
     params["service_name"] = service_name
@@ -336,9 +334,7 @@ def create(params):
     if swarm_util.get_service(params["service_name"]):
         return f"Service name {params['service_name']} already in use"
 
-    volume_id, error = swarm_util.create_docker_volume(params["volume_name"])
-    if error:
-        return f"Error creating docker volume {params['volume_name']}. Error: {error}"
+    swarm_util.create_docker_volume(params["volume_name"])
 
     config_ref = create_init_script(params)
     if config_ref is None:

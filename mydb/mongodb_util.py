@@ -140,9 +140,7 @@ def migrate(info):
 
     # Create Docker volume
     volume_name = f"mydb_{dbname}"
-    volume_id, error = swarm_util.create_docker_volume(volume_name)
-    if error:
-        return f"Error creating docker volume {volume_name}. Error: {error}"
+    swarm_util.create_docker_volume(volume_name)
 
     # Build params from v1 metadata
     params = build_params_mongo(info)
@@ -229,9 +227,7 @@ def create_mongodb(params):
         return f"Service name {params['service_name']} already in use"
 
     # Create Docker volume
-    volume_id, error = swarm_util.create_docker_volume(params["volume_name"])
-    if error:
-        return f"Error creating docker volume {params['volume_name']}. Error: {error}"
+    swarm_util.create_docker_volume(params["volume_name"])
 
     # Create init script config
     config_ref = create_init_script(params)

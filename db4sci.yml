@@ -9,6 +9,10 @@ services:
         volumes:
             - db4sci:/data
             - /var/run/docker.sock:/var/run/docker.sock
+            # swarm_util.create_docker_volume() mkdirs the backing directory for
+            # every database volume; it has to land on the shared storage, so
+            # SWARM_DEVICE is bind mounted here at the same path.
+            - ${SWARM_DEVICE}:${SWARM_DEVICE}
         env_file:
             - .env
         environment:
@@ -36,6 +40,6 @@ volumes:
     db4sci:
         driver: ${SWARM_DRIVER}
         driver_opts:
-            type: ${SWARM_DRIVER_TYPE}
+            type: ${SWARM_TYPE}
             o: ${SWARM_OPTS}
             device: "${SWARM_DEVICE}/admin_db"
