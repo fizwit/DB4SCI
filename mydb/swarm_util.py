@@ -5,6 +5,7 @@ This module contains functions for managing Docker Swarm services.
 """
 
 import json
+import os
 import sys
 import time
 
@@ -68,28 +69,44 @@ def volume_list():
 
 def create_docker_volume(vname):
     """create a volume if it does not exist
-    Returns: volume_id
-        - If successful: (volume_id, None)
-        - If error: (None, error_message)
+    Returns: volume name (str)
     raise AppError on Error
     """
-    volume_id = get_volume(vname)
-    if volume_id:
+    if get_volume(vname):
         raise AppError(f"Docker volumes.get error: Volume {vname} Exists, cleanup before resusing")
 
+    device = f"{cfg.SWARM_DEVICE}/{vname}"
+    # SWARM_TYPE=none / SWARM_OPTS=bind is a bind mount: `volume create` only
+    # writes the volume metadata, docker never creates the backing directory,
+    # and the mount is not attempted until a task starts.  Without this mkdir
+    # the volume shows up in `docker volume ls` with nothing behind it and
+    # every task dies with "failed to mount local volume ... no such file or
+    # directory".  SWARM_DEVICE must be bind mounted into the DB4SCI container
+    # (see db4sci.yml) so the directory lands on the shared storage and not
+    # inside this container.
+    #
+    # SWARM_TYPE=nfs is different: SWARM_DEVICE is an export path on the NFS
+    # server (":/exports/mydata"), not a path on this host, so there is nothing
+    # local to create -- the export has to exist on the server already.
+    if cfg.SWARM_TYPE == "none":
+        try:
+            os.makedirs(device, mode=0o755, exist_ok=True)
+        except OSError as e:
+            raise AppError(f"Error creating volume directory {device}: {e}") from e
+
     try:
-        volume_id = client.volumes.create(
+        volume = client.volumes.create(
             name=vname,
             driver=cfg.SWARM_DRIVER,
             driver_opts={
                 "type": cfg.SWARM_TYPE,
                 "o": cfg.SWARM_OPTS,
-                "device": f"{cfg.SWARM_DEVICE}/{vname}",
+                "device": device,
                 },
             labels={"createdby": "DB4SCI"})
     except APIError as e:
         raise AppError(f"Error creating docker volume: {vname}\n{e}")
-    return volume_id
+    return volume.name
 
 
 def volume_remove(vname):

@@ -205,9 +205,7 @@ def create(params):
     params["volume_name"] = f"mydb_{params['Name']}"
     if swarm_util.get_service(params["service_name"]):
         return f"Container name {params['service_name']} already in use"
-    volume_id, error = swarm_util.create_docker_volume(params["volume_name"])
-    if error:
-        return f"Error creatinge docker volume {params['volume_name']}. Error: {error}"
+    swarm_util.create_docker_volume(params["volume_name"])
     config_ref = create_init_script(params)
 
     config_data = mydb_config.info[dbengine]
