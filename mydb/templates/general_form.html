@@ -49,9 +49,9 @@
           <div class="form-field">
             <label for="image">{{ dblabel }} Version <span class="required">*</span></label>
             <select name="image" id="image" tabindex="50" required>
-              {% for img in image_list %}
-              <option value="{{ img[1] }}" {% if loop.first %}selected{% endif %}>
-                {{ img[0] }}
+              {% for v in version_list %}
+              <option value="{{ v.image }}" {% if loop.first %}selected{% endif %}>
+                {{ v.label }}
               </option>
               {% endfor %}
             </select>

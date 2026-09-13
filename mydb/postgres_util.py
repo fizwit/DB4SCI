@@ -134,9 +134,9 @@ def build_params_postgres(info) -> dict:
     """
     params = {}
     params["dbengine"] = info["dbengine"]
-    config_data = mydb_config.info[dbengine]
-    params["image"] = config_data["images"][0][1]
-    params["mapped_db_vol"] = config_data["mapped_volume"]
+    config_data = mydb_config.dbs[dbengine]
+    params["image"] = mydb_config.default_image(dbengine)
+    params["mapped_db_vol"] = mydb_config.mapped_volume(dbengine, params["image"])
     params["default_port"] = config_data["default_port"]
     params["service_user"] = config_data["service_user"]
     params["dbname"] = info["Name"]
@@ -208,8 +208,8 @@ def create(params):
     swarm_util.create_docker_volume(params["volume_name"])
     config_ref = create_init_script(params)
 
-    config_data = mydb_config.info[dbengine]
-    params["mapped_db_vol"] = config_data["mapped_volume"]
+    config_data = mydb_config.dbs[dbengine]
+    params["mapped_db_vol"] = mydb_config.mapped_volume(dbengine, params["image"])
     params["default_port"] = config_data["default_port"]
     params["service_user"] = config_data["service_user"]  # 'postgres'
     params["Port"] = admin_db.get_max_port()

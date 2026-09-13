@@ -95,9 +95,9 @@ def build_params_mongo(info):
     """
     params = {}
     params["dbengine"] = info["dbengine"]
-    params["image"] = mydb_config.info[dbengine]["images"][0][1]
-    params["default_port"] = mydb_config.info[dbengine]["default_port"]
-    params["service_user"] = mydb_config.info[dbengine]["service_user"]
+    params["image"] = mydb_config.default_image(dbengine)
+    params["default_port"] = mydb_config.dbs[dbengine]["default_port"]
+    params["service_user"] = mydb_config.dbs[dbengine]["service_user"]
     params["dbname"] = info["Name"]  # dbname is missing in V1 metadata
     params["Name"] = info["Name"]
     if "DB_USER" in info:
@@ -146,7 +146,7 @@ def migrate(info):
     params = build_params_mongo(info)
     params["service_name"] = f"mydb_{dbname}"
     params["volume_name"] = volume_name
-    params["mapped_db_vol"] = mydb_config.info[dbengine]["mapped_volume"]
+    params["mapped_db_vol"] = mydb_config.mapped_volume(dbengine, params["image"])
 
     # Create init script config
     config_ref = create_init_script(params)
@@ -235,8 +235,8 @@ def create_mongodb(params):
         return "Error: creating Docker Config"
 
     # Get config data
-    config_data = mydb_config.info[dbengine]
-    params["mapped_db_vol"] = config_data["mapped_volume"]
+    config_data = mydb_config.dbs[dbengine]
+    params["mapped_db_vol"] = mydb_config.mapped_volume(dbengine, params["image"])
     params["default_port"] = config_data["default_port"]
     params["service_user"] = config_data["service_user"]
     params["Port"] = admin_db.get_max_port()

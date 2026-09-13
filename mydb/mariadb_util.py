@@ -232,9 +232,9 @@ def build_params_mariadb(info) -> dict:
     """
     params = {}
     params["dbengine"] = dbengine
-    config_data = mydb_config.info[dbengine]
-    params["image"] = config_data["images"][0][1]
-    params["mapped_db_vol"] = config_data["mapped_volume"]
+    config_data = mydb_config.dbs[dbengine]
+    params["image"] = mydb_config.default_image(dbengine)
+    params["mapped_db_vol"] = mydb_config.mapped_volume(dbengine, params["image"])
     params["default_port"] = config_data["default_port"]
     params["service_user"] = config_data["service_user"]
     params["dbname"] = info["Name"]
@@ -340,8 +340,8 @@ def create(params):
     if config_ref is None:
         return "Error: creating Docker Config"
 
-    config_data = mydb_config.info[params["dbengine"]]
-    params["mapped_db_vol"] = config_data["mapped_volume"]
+    config_data = mydb_config.dbs[params["dbengine"]]
+    params["mapped_db_vol"] = mydb_config.mapped_volume(params["dbengine"], params["image"])
     params["default_port"] = config_data["default_port"]
     params["service_user"] = config_data["service_user"]  # 'root'
     params["Port"] = admin_db.get_max_port()
