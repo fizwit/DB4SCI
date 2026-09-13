@@ -168,7 +168,7 @@ def create_form():
         return render_template(
             "general_form.html",
             dblabel=dbengine,
-            image_list=mydb_config.info[dbengine]["images"],
+            version_list=mydb_config.dbs[dbengine]["V"],
         )
     else:
         message = "ERROR: create_form: url argument dbengine is incorrect. "
