@@ -142,15 +142,12 @@ dbs = {  # Database engine configuration
         "service_user": "postgres",
         "V": [  # Versions
             {"version": "18.6",
-                "label": "Postgres 18.6",
                 "image": "postgres:18.6",
                 "volume": "/var/lib/postgresql/"},
             {"version": "17.4",
-                "label": "Postgres 17.4",
                 "image": "postgres:17.4",
                 "volume": "/var/lib/postgresql/data"},
             {"version": "13.2",
-                "label": "Postgres 13.2",
                 "image": "postgres:13.2",
                 "volume": "/var/lib/postgresql/data"},
         ],
@@ -162,7 +159,6 @@ dbs = {  # Database engine configuration
         "mapped_volume": "/var/lib/mysql",
         "V": [  # Versions
             {"version": "12.0.2",
-                "label": "MariaDB 12.0.2",
                 "image": "mariadb:12.0.2",
                 "volume": "/var/lib/mysql"},
         ],
@@ -177,7 +173,6 @@ dbs = {  # Database engine configuration
         "dbengine": "MongoDB",
         "V": [  # Versions
             {"version": "8.2.2",
-                "label": "MongoDB 8.2.2",
                 "image": "mongo:8.2.2",
                 "volume": "/data/db"},
         ],
@@ -197,7 +192,6 @@ dbs = {  # Database engine configuration
     #    "mapped_volume": "/data",
     #    "V": [  # Versions
     #        {"version": "3.2.5",
-    #            "label": "Neo4j 3.2.5",
     #            "image": "neo4j:3.2.5",
     #            "volume": "/data"},
     #    ],

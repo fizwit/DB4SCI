@@ -51,7 +51,7 @@
             <select name="image" id="image" tabindex="50" required>
               {% for v in version_list %}
               <option value="{{ v.image }}" {% if loop.first %}selected{% endif %}>
-                {{ v.label }}
+                {{ dblabel }} {{ v.version }}
               </option>
               {% endfor %}
             </select>
