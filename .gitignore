@@ -12,6 +12,8 @@ test/*
 requirements.docker-ce
 env_setup.sh
 mydb/mydb_config.py
+# a stray copy at the repo root is NOT covered by the line above
+/mydb_config.py
 Extras
 __pycache__/
 
