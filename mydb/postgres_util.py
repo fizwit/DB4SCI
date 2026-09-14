@@ -162,33 +162,72 @@ def build_params_postgres(info) -> dict:
     return params
 
 
-def migrate(info):
-    """migrate postgres container
-    Use meta data from v1 of mydb to create new docker swarm service
+def admin_connect_cmd(port):
+    """psql command line that connects to a container as the MyDB admin role."""
+    return (f"PGPASSWORD=\'{mydb_config.PG_ADMIN_PASS}\' "
+            f"psql -h {mydb_config.container_host} -p {port} "
+            f"-d postgres -U {mydb_config.PG_ADMIN}")
+
+
+def admin_reset_sql():
+    """SQL that puts the MyDB admin password back after a restore.
+
+    A dump taken from Postgres 13 or older carries md5 password hashes in its
+    globals.  Restoring it overwrites pg_authid on the new server, and 14+
+    containers authenticate with scram-sha-256, which cannot verify an md5
+    hash.  The admin role is locked out at that point -- including MyDB itself,
+    which is why this is handed to an operator to paste into a session opened
+    before the restore rather than run here.
+    """
+    return f"ALTER ROLE {mydb_config.PG_ADMIN} WITH PASSWORD \'{mydb_config.PG_ADMIN_PASS}\';"
+
+
+def migrate_create(info):
+    """First half of a migrate: build the empty container, restore nothing.
+
+    The restore is deliberately a separate step (migrate_restore) so the UI can
+    stop in between and let an operator open a psql session -- see
+    admin_reset_sql() for why that session matters.
+
+    Returns: (params, None) on success, (None, error_message) on failure.
     """
     dbname = info["Name"]
     if swarm_util.get_service(dbname):
-        return f"Container name {dbname} already in use"
+        return None, f"Container name {dbname} already in use"
     dump_prefix = aws_util.lastbackup_s3_prefix(dbname, mydb_config.s3_prefix_migrate)
     if dump_prefix[:5] == "Error":
-        return dump_prefix
+        return None, dump_prefix
     volume_name = f"mydb_{dbname}"
     swarm_util.create_docker_volume(volume_name)
     params = build_params_postgres(info)
     params["service_name"] = f"mydb_{dbname}"
     params["volume_name"] = volume_name
-    # meta_data = json.dumps(params, indent=4)
-    # print(f"DEBUG: postgres_util.migrate: {dbname}\nMeta data for container recovery: {meta_data}")
+    params["dump_prefix"] = dump_prefix
     config_ref = create_init_script(params)
 
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
-        return f"{error} {mydb_config.supportOrgName} has been notified"
+        return None, f"{error} {mydb_config.supportOrgName} has been notified"
     params["service_id"] = service.id
     wait_for_postgres(dbname, params["Port"])
-    result = pg_restore(params, params, dump_prefix)
-    print(f"==== DEBUG: postgres_util.migrate: {dbname}\n{result}")
+    return params, None
+
+
+def migrate_restore(dbname, port, dump_prefix):
+    """Second half of a migrate: load the backup into the container that
+    migrate_create() built.  Takes plain values rather than `params` so the
+    caller can carry them through the confirmation page."""
+    dest = {"dbname": dbname, "Port": port}
+    result = pg_restore(dest, dest, dump_prefix)
+    print(f"==== DEBUG: postgres_util.migrate_restore: {dbname}\n{result}")
     return result
+
+
+def restore(info, s3_prefix):
+    """Restore an existing container from an S3 backup prefix.
+    Called from mydb_actions.restore()."""
+    dest = {"dbname": info.get("dbname", info["Name"]), "Port": info["Port"]}
+    return pg_restore(dest, dest, s3_prefix)
 
 
 def create(params):

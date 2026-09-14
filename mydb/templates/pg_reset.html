@@ -1,0 +1,54 @@
+{% extends "main_menu.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block head %}
+{{ super() }}
+<style>
+  .reset-box { max-width: 900px; }
+  .reset-box .warn {
+    border-left: 4px solid #d32f2f;
+    background: #fdf3f3;
+    padding: 0.6rem 1rem;
+    margin: 1rem 0;
+  }
+  .reset-box code, .reset-box pre {
+    background: #f4f4f4;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 0.5rem 0.75rem;
+    display: block;
+    overflow-x: auto;
+    user-select: all;
+  }
+  .reset-box pre.output { max-height: 18rem; font-size: 0.85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="container">
+  <div class="title"><h4>{{ header }}</h4></div>
+  <div id="content" class="reset-box">
+
+    <div class="warn">
+      <strong>The {{ pg_admin }} password is now the one from the backup.</strong>
+      MyDB can no longer authenticate to <strong>{{ container_name }}</strong>. Paste this into the
+      psql session you opened before the restore &mdash; that session is still authenticated and is
+      the only way back in:
+    </div>
+
+    <code>{{ reset_sql }}</code>
+
+    <p>Then verify a fresh connection works before closing the old session:</p>
+    <code>{{ connect_cmd }}</code>
+
+    <p>Application roles restored from the backup carry the same stale md5 hashes. Reset any you
+       need with the same statement, for example:</p>
+    <code>ALTER ROLE &lt;dbuser&gt; WITH PASSWORD 'changeme';</code>
+    <p>Then have the owner change it. You can list the restored roles from your open session with
+       <code style="display:inline;padding:0 3px">\du</code>.</p>
+
+    <div class="title"><h4>Restore Output</h4></div>
+    <pre class="output">{{ result }}</pre>
+
+  </div>
+</div>
+{% endblock %}

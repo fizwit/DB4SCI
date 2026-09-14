@@ -106,7 +106,13 @@ def migrate_actions(action, args):
         return dbengine
     if action == "migrate":
         if dbengine == "Postgres":
-            result = postgres_util.migrate(info)
+            # Postgres migrates in two steps and is intercepted by
+            # mydb_views.select_container(): pg_pause.html -> pg_continue().
+            # It has to stop between creating the container and loading the
+            # backup so an operator can hold an open psql session.  Reaching
+            # here means that interception was bypassed.
+            result = ("Error: Postgres migration runs as a two-step flow; "
+                      "start it from 'Migrate Container' in the menu.")
         elif dbengine == "MariaDB":
             result = mariadb_util.migrate(info)
         elif dbengine == "MongoDB":
