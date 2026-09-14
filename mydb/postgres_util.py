@@ -39,8 +39,8 @@ def pg_admin_connect(dbname, port):
     try:
         conn = psycopg.connect(
             host=mydb_config.container_host,
-            user=mydb_config.pg_admin,
-            password=mydb_config.pg_admin_pass,
+            user=mydb_config.PG_ADMIN,
+            password=mydb_config.PG_ADMIN_PASS,
             port=port,
             dbname=dbname,
         )
@@ -114,8 +114,8 @@ def pg_env(auth_meth=None) -> list:
     search TDE for encryption at rest
     """
     env = [
-        f"POSTGRES_USER={mydb_config.pg_admin}",
-        f"POSTGRES_PASSWORD={mydb_config.pg_admin_pass}",
+        f"POSTGRES_USER={mydb_config.PG_ADMIN}",
+        f"POSTGRES_PASSWORD={mydb_config.PG_ADMIN_PASS}",
         "POSTGRES_DB=postgres",
         "POSTGRES_INITDB_ARGS=--data-encryption "
         "--file-encryption-method=AES256"
@@ -262,10 +262,10 @@ def backup(c_id, info, backup_type):
     pg_dumpall_cmd = "pg_dumpall -g "
     pg_dumpall_cmd += f"--host {mydb_config.container_host} "
     pg_dumpall_cmd += f"--port {info['Port']} "
-    pg_dumpall_cmd += f"-U {mydb_config.pg_admin}"
+    pg_dumpall_cmd += f"-U {mydb_config.PG_ADMIN}"
 
     # Set PGPASSWORD environment variable for pg_dumpall
-    env = {"PGPASSWORD": mydb_config.pg_admin_pass}
+    env = {"PGPASSWORD": mydb_config.PG_ADMIN_PASS}
 
     # Log backup start
     admin_db.backup_log(
@@ -298,8 +298,8 @@ def backup(c_id, info, backup_type):
     try:
         connection = psycopg.connect(
             host=mydb_config.container_host,
-            user=mydb_config.pg_admin,
-            password=mydb_config.pg_admin_pass,
+            user=mydb_config.PG_ADMIN,
+            password=mydb_config.PG_ADMIN_PASS,
             port=info["Port"],
             dbname="postgres",
         )
@@ -330,7 +330,7 @@ def backup(c_id, info, backup_type):
         pg_dump_cmd += "--lock-wait-timeout=5000 "
         pg_dump_cmd += f"--host {mydb_config.container_host} "
         pg_dump_cmd += f"--port {info['Port']} "
-        pg_dump_cmd += f"--username {mydb_config.pg_admin} "
+        pg_dump_cmd += f"--username {mydb_config.PG_ADMIN} "
         pg_dump_cmd += "-F c"
 
         # Use common S3 piped backup function with environment variables
@@ -512,12 +512,12 @@ def pg_restore(source, dest, S3_prefix):
             result_msg = f" s3 objects: {base_file}..."
     psql_cmd = (f"psql --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
-        f"--dbname postgres -U {mydb_config.pg_admin}")
+        f"--dbname postgres -U {mydb_config.PG_ADMIN}")
     pg_restore = (f"pg_restore --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
-        f"-U {mydb_config.pg_admin} --dbname XXXX "
+        f"-U {mydb_config.PG_ADMIN} --dbname XXXX "
         "--clean --if-exists --format=c ")
-    password_env = {"PGPASSWORD": mydb_config.pg_admin_pass}
+    password_env = {"PGPASSWORD": mydb_config.PG_ADMIN_PASS}
 
     # Run SQL command file
     SQL_file = None
