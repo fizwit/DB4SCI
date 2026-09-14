@@ -3,7 +3,7 @@ set -a
 source .env
 set +a
 
-docker config create db4sci-init.sql - <<'EOF'
+docker config create mydb_db4sci_init.sql - <<'EOF'
 -- Create Role
 CREATE ROLE ${admin} WITH LOGIN PASSWORD '${admin_pass}';
 ALTER USER ${admin} WITH SUPERUSER;
