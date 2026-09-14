@@ -1,0 +1,74 @@
+{% extends "main_menu.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block head %}
+{{ super() }}
+<style>
+  .pause-box { max-width: 900px; }
+  .pause-box .warn {
+    border-left: 4px solid #d32f2f;
+    background: #fdf3f3;
+    padding: 0.6rem 1rem;
+    margin: 1rem 0;
+  }
+  .pause-box code, .pause-box pre {
+    background: #f4f4f4;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 0.5rem 0.75rem;
+    display: block;
+    overflow-x: auto;
+    user-select: all;
+  }
+  .pause-box ol { line-height: 1.6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="container">
+  <div class="title"><h4>{{ header }}</h4></div>
+  <div id="content" class="pause-box">
+
+    <p>The empty <strong>{{ container_name }}</strong> container is running on port
+       <strong>{{ port }}</strong>. The backup has <em>not</em> been loaded yet.</p>
+
+    <div class="warn">
+      <strong>Do not skip this step.</strong>
+      The backup was taken from an older PostgreSQL release, so its globals carry
+      <code style="display:inline;padding:0 3px">md5</code> password hashes. Loading it overwrites
+      <code style="display:inline;padding:0 3px">pg_authid</code> on this container, and PostgreSQL&nbsp;14
+      and later authenticate with <code style="display:inline;padding:0 3px">scram-sha-256</code>, which
+      cannot verify an md5 hash. The <strong>{{ pg_admin }}</strong> role &mdash; including MyDB's own
+      access &mdash; is locked out the moment the restore finishes.
+      An <em>already authenticated</em> session keeps working, so open one now and leave it open.
+    </div>
+
+    <ol>
+      <li>
+        <p>Open a session to the empty container and <strong>leave this terminal open</strong>:</p>
+        <code>{{ connect_cmd }}</code>
+      </li>
+      <li>
+        <p>Confirm it works &mdash; you should get a <code style="display:inline;padding:0 3px">postgres=#</code>
+           prompt. If it does not connect, stop here and fix that first; continuing will leave
+           the container unreachable.</p>
+      </li>
+      <li>
+        <p>With that session still open, continue. The restore runs, and the next page gives you
+           the SQL to paste into it.</p>
+      </li>
+    </ol>
+
+    <form method="POST" action="{{ url_for('pg_continue') }}">
+      <input type="hidden" name="pg_action" value="{{ pg_action }}">
+      <input type="hidden" name="container_name" value="{{ container_name }}">
+      <input type="hidden" name="dbname" value="{{ dbname }}">
+      <input type="hidden" name="port" value="{{ port }}">
+      <input type="hidden" name="s3_prefix" value="{{ s3_prefix }}">
+      <div style="text-align: center; margin-top: 1.5rem;">
+        <button type="submit">I have an open session &mdash; run the restore</button>
+      </div>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

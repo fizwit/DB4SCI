@@ -2,6 +2,43 @@
 {% block title %}Create {{ dblabel }} Database{% endblock %}
 {% block head %}
 {{ super() }}
+<style>
+  /* This form is desktop-only and should fit one screen with no scrolling.
+     Everything here is scoped to this page; style.css is shared with the rest
+     of the app and is deliberately left alone. */
+
+  /* The shared banner is sized for content pages and costs ~200px here. */
+  header.app_name .logo img { height: 48px; width: auto; }
+
+  /* Spend the horizontal room rather than the vertical: 4 columns, not 2. */
+  .form-container { max-width: 1280px; padding: 8px 16px; }
+  .form-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px 20px;
+    margin-bottom: 0;
+  }
+
+  /* Tighten each field.  The inputs pick up a 20px bottom margin from the
+     shared stylesheet that does nothing inside a flex-column field. */
+  .form-field label { margin-bottom: 2px; font-size: 0.8rem; }
+  .form-field input[type="text"],
+  .form-field input[type="password"],
+  .form-field input[type="email"],
+  .form-field select {
+    padding: 0.25rem 0.45rem;
+    font-size: 0.88rem;
+    margin-bottom: 0;
+  }
+  .field-hint { font-size: 0.72rem; margin-top: 1px; }
+  .field-hint.mismatch { color: #d32f2f; }
+
+  /* Section chrome. */
+  .title h4 { margin: 0.15rem 0; font-size: 1rem; }
+  .form-section { margin-top: 6px; margin-bottom: 10px; padding-bottom: 8px; }
+  .form-section h3 { margin: 0 0 5px 0; font-size: 1rem; }
+
+  form button[type="submit"] { padding: 0.45rem 2.5rem; font-size: 1rem; }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -44,6 +81,13 @@
             <label for="dbuserpass">Database Password <span class="required">*</span></label>
             <input type="password" name="dbuserpass" id="dbuserpass" tabindex="40" autocomplete="new-password" required>
             <span class="field-hint">Minimum 8 characters recommended</span>
+          </div>
+
+          <div class="form-field">
+            <label for="dbuserpass_confirm">Confirm Password <span class="required">*</span></label>
+            <!-- no name= on purpose: this field is a typo guard, it must not post -->
+            <input type="password" id="dbuserpass_confirm" tabindex="45" autocomplete="new-password" required>
+            <span class="field-hint" id="dbuserpass_confirm-hint">Re-enter the password to confirm</span>
           </div>
 
           <div class="form-field">
@@ -93,6 +137,11 @@
                    value="{{ session.mail if session.mail else '' }}" required>
           </div>
 
+          <div class="form-field">
+            <label for="app_name">Application Name (optional)</label>
+            <input type="text" name="app_name" id="app_name" tabindex="90">
+          </div>
+
           <div class="form-field full-width">
             <label for="department">Department<span class="required">*</span></label>
             <input type="text" name="department" id="department" tabindex="80"
@@ -105,19 +154,43 @@
                    placeholder="Brief description of the database purpose" required>
           </div>
 
-          <div class="form-field">
-            <label for="app_name">Application Name (optional)</label>
-            <input type="text" name="app_name" id="app_name" tabindex="90">
-          </div>
         </div>
       </div>
 
       <!-- Submit Button -->
-      <div style="text-align: center; margin-top: 2rem;">
+      <div style="text-align: center; margin-top: 0.6rem;">
         <button type="submit">Submit</button>
       </div>
     </form>
   </div>
 </div>
 </div>
+
+<script>
+  // Block submit while the two password fields disagree.  setCustomValidity()
+  // hooks into the browser's own form validation, so this uses the same
+  // reporting as the `required` attributes on the rest of the form.
+  (function () {
+    var pass = document.getElementById("dbuserpass");
+    var confirmPass = document.getElementById("dbuserpass_confirm");
+    var hint = document.getElementById("dbuserpass_confirm-hint");
+    var defaultHint = hint.textContent;
+
+    function check() {
+      if (confirmPass.value !== "" && confirmPass.value !== pass.value) {
+        confirmPass.setCustomValidity("Passwords do not match");
+        hint.textContent = "Passwords do not match";
+        hint.classList.add("mismatch");
+      } else {
+        confirmPass.setCustomValidity("");
+        hint.textContent = defaultHint;
+        hint.classList.remove("mismatch");
+      }
+    }
+
+    pass.addEventListener("input", check);
+    confirmPass.addEventListener("input", check);
+    check();
+  })();
+</script>
 {% endblock %}
