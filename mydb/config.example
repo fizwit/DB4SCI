@@ -60,6 +60,11 @@ FLASK_SECRET = get_secret("flask_secret", "FLASK_SECRET")
 SQLALCHEMY_ADMIN_URI = get_secret("sqlalchemy_admin_uri", "SQLALCHEMY_ADMIN_URI")
 SQLALCHEMY_MIGRATE_URI = get_secret("sqlalchemy_migrate_uri", "SQLALCHEMY_MIGRATE_URI")
 
+# Postgres privileged account MyDB uses for backup/restore and for
+# creating user databases.  Passed in by db4sci.yml.
+PG_ADMIN = get_secret("pg_admin", "PG_ADMIN")
+PG_ADMIN_PASS = get_secret("pg_admin_pass", "PG_ADMIN_PASS")
+
 # =============================================================================
 # Docker Swarm Storage
 # =============================================================================
@@ -269,8 +274,9 @@ admindb_log = "/mydb/logs/admindb.log"
 
 accounts = {
     "Postgres": {
-        "admin": "pgdba",
-        "admin_pass": "CHANGE_ME_POSTGRES_ADMIN_PASSWORD"
+        # Moved to docker env vars, see PG_ADMIN/PG_ADMIN_PASS above.
+        "admin": PG_ADMIN,
+        "admin_pass": PG_ADMIN_PASS,
     },
     "MongoDB": {
         "admin": "dbaas",
