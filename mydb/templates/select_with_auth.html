@@ -10,8 +10,8 @@
   <div id="content">
     <br>
     <form method="post" action="{{ url_for('selected_auth') }}">
-      <label for="container">Select Container<label>
-      <input type="text" name="Name" list="container_list" placeholder="Container Name" /><br />
+      <label for="container">Select Container</label>
+      <input type="text" name="Name" list="container_names" placeholder="Container Name" /><br />
          <datalist id="container_list">
              {% for o in items %}
                 <option value="{{ o }}">

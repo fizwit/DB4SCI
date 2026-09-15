@@ -11,9 +11,13 @@ fi
 
 echo -n 'Service: '
 docker service rm mydb_${name}
-sleep 4
 echo -n 'Config: ' 
 docker config rm  mydb_${name}_init.sql
-echo -n 'Volume: ' 
-docker volume rm mydb_${name}
-
+sleep 4
+status=$(docker volume rm mydb_${name} 2>&1)
+echo "Volume: ${status}" 
+while [[ ${status} == *"volume is in use"* ]]; do
+    sleep 2
+    status=$(docker volume rm mydb_${name} 2>&1)
+    echo "Volume: ${status}" 
+done

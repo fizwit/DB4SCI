@@ -33,7 +33,6 @@
   .field-hint.mismatch { color: #d32f2f; }
 
   /* Section chrome. */
-  .title h4 { margin: 0.15rem 0; font-size: 1rem; }
   .form-section { margin-top: 6px; margin-bottom: 10px; padding-bottom: 8px; }
   .form-section h3 { margin: 0 0 5px 0; font-size: 1rem; }
 
@@ -83,12 +82,7 @@
             <span class="field-hint">Minimum 8 characters recommended</span>
           </div>
 
-          <div class="form-field">
-            <label for="dbuserpass_confirm">Confirm Password <span class="required">*</span></label>
-            <!-- no name= on purpose: this field is a typo guard, it must not post -->
-            <input type="password" id="dbuserpass_confirm" tabindex="45" autocomplete="new-password" required>
-            <span class="field-hint" id="dbuserpass_confirm-hint">Re-enter the password to confirm</span>
-          </div>
+          <!-- Row Two -->
 
           <div class="form-field">
             <label for="image">{{ dblabel }} Version <span class="required">*</span></label>
@@ -109,15 +103,19 @@
               <option value="Never">Never</option>
             </select>
           </div>
-          {% if dblabel == "MariaDB" %}
-          <div class="form-field">
-            <label for="EAR">Encryption at Rest <span class="required">*</span></label>
-            <select name="EAR" id="EAR" tabindex="58" required>
-              <option value="No" selected>No</option>
-              <option value="Yes">Yes</option>
-            </select>
+
+          <div>
+            <!-- blank space on form -->
           </div>
-          {% endif %}
+
+          <div class="form-field">
+            <label for="dbuserpass_confirm">Confirm Password <span class="required">*</span></label>
+            <!-- no name= on purpose: this field is a typo guard, it must not post -->
+            <input type="password" id="dbuserpass_confirm" tabindex="45" autocomplete="new-password" required>
+            <span class="field-hint" id="dbuserpass_confirm-hint">Re-enter the password to confirm</span>
+          </div>
+
+
         </div>
       </div>
 
