@@ -19,19 +19,6 @@ from .send_mail import send_mail
 dbengine = "Postgres"
 
 
-def pg_connection_string(user, password, port):
-    """Create a PostgreSQL connection string to use with psycopg.connect()"""
-    return "".join(
-        [
-            f"host={mydb_config.container_host}",
-            f"port={port}",
-            "dbname=postgres",
-            f"user={user}",
-            f"password={password}",
-        ]
-    )
-
-
 def pg_admin_connect(dbname, port):
     """Connect to PostgreSQL as admin user
        return a Postgres connection
@@ -51,12 +38,23 @@ def pg_admin_connect(dbname, port):
 
 
 def auth_check(dbuser, dbuserpass, port):
-    """Connect to Postgres with users credentinals to
-    validate that they have access
+    """Validate a set of credentials against a container.
+
+    Accepts either a database owner account (create_init_script grants them
+    SUPERUSER) or the POSTGRES_USER admin account -- both authenticate against
+    the `postgres` database the same way.
+
+    Passed as keyword arguments rather than a conninfo string so that a
+    password containing a space, quote or backslash cannot corrupt it.
     """
-    connect = pg_connection_string(dbuser, dbuserpass, port)
     try:
-        conn = psycopg.connect(connect)
+        conn = psycopg.connect(
+            host=mydb_config.container_host,
+            port=port,
+            dbname="postgres",
+            user=dbuser,
+            password=dbuserpass,
+        )
     except Exception as e:
         print(f"auth_check Error: {e}", file=sys.stderr)
         return False
