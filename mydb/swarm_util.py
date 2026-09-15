@@ -6,11 +6,12 @@ This module contains functions for managing Docker Swarm services.
 
 import json
 import os
+import re
 import sys
 import time
 
 import docker
-from docker.errors import APIError, NotFound
+from docker.errors import APIError, ContainerError, ImageNotFound, NotFound
 from docker.types import ConfigReference, EndpointSpec, Mount, RestartPolicy
 
 from . import mydb_config as cfg
@@ -67,6 +68,57 @@ def volume_list():
     return volume_info
 
 
+VOLUME_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
+
+
+def nfs_root_volume():
+    """Docker volume mounting the root of the NFS export.
+
+    Staging mount only -- it exists so create_volume_directory() has somewhere
+    to mkdir.  Created once and reused.
+    """
+    name = "mydb_nfs_root"
+    if get_volume(name):
+        return name
+    try:
+        client.volumes.create(
+            name=name,
+            driver=cfg.SWARM_DRIVER,
+            driver_opts={
+                "type": cfg.SWARM_TYPE,
+                "o": cfg.SWARM_OPTS,
+                "device": f"{cfg.SWARM_DEVICE}/",
+                },
+            labels={"createdby": "DB4SCI"})
+    except APIError as e:
+        raise AppError(f"Error creating NFS root volume {name}: {e}")
+    return name
+
+
+def create_volume_directory(vname):
+    """Create the backing directory for an NFS-backed volume.
+
+    Docker does not create the directory an NFS volume points at, and that
+    directory lives on the NFS server rather than on this host, so os.makedirs()
+    cannot reach it.  Mount the export root in a throwaway container and mkdir
+    from in there.
+
+    Technique taken from dtenenba's deployment-prep branch.
+    """
+    root = nfs_root_volume()
+    try:
+        client.containers.run(
+            "alpine",
+            ["mkdir", "-p", f"/mnt/{vname}"],
+            volumes={root: {"bind": "/mnt", "mode": "rw"}},
+            remove=True,
+        )
+    except ImageNotFound as e:
+        raise AppError(f"Cannot create NFS directory for {vname}: alpine image unavailable: {e}")
+    except (APIError, ContainerError) as e:
+        raise AppError(f"Error creating NFS directory for {vname}: {e}")
+
+
 def create_docker_volume(vname):
     """create a volume if it does not exist
     Returns: volume name (str)
@@ -75,20 +127,25 @@ def create_docker_volume(vname):
     if get_volume(vname):
         raise AppError(f"Docker volumes.get error: Volume {vname} Exists, cleanup before resusing")
 
+    # vname reaches a filesystem path and a container argv below
+    if not VOLUME_NAME_RE.match(vname):
+        raise AppError(f"Refusing to create volume with unsafe name: {vname!r}")
+
     device = f"{cfg.SWARM_DEVICE}/{vname}"
-    # SWARM_TYPE=none / SWARM_OPTS=bind is a bind mount: `volume create` only
-    # writes the volume metadata, docker never creates the backing directory,
-    # and the mount is not attempted until a task starts.  Without this mkdir
-    # the volume shows up in `docker volume ls` with nothing behind it and
-    # every task dies with "failed to mount local volume ... no such file or
-    # directory".  SWARM_DEVICE must be bind mounted into the DB4SCI container
-    # (see db4sci.yml) so the directory lands on the shared storage and not
-    # inside this container.
+    # Docker never creates the directory a volume points at, and it does not
+    # attempt the mount until a task starts.  Skip this and the volume shows up
+    # in `docker volume ls` with nothing behind it, and every task dies with
+    # "failed to mount local volume ... no such file or directory".
     #
-    # SWARM_TYPE=nfs is different: SWARM_DEVICE is an export path on the NFS
-    # server (":/exports/mydata"), not a path on this host, so there is nothing
-    # local to create -- the export has to exist on the server already.
-    if cfg.SWARM_TYPE == "none":
+    # How to create it depends on where it lives:
+    #   nfs  - SWARM_DEVICE is an export path on the NFS server, unreachable
+    #          from this host, so mkdir from inside a container that mounts it.
+    #   none - a plain bind mount, so mkdir directly.  SWARM_DEVICE must be
+    #          bind mounted into the DB4SCI container (see db4sci.yml) so the
+    #          directory lands on the shared storage, not inside this container.
+    if cfg.SWARM_TYPE == "nfs":
+        create_volume_directory(vname)
+    elif cfg.SWARM_TYPE == "none":
         try:
             os.makedirs(device, mode=0o755, exist_ok=True)
         except OSError as e:
@@ -112,7 +169,11 @@ def create_docker_volume(vname):
 def volume_remove(vname):
     """Remove a docker volume
     volume remove typically fails until the service if fully removed.
-    Try to remove for a few times before giving up"""
+    Try to remove for a few times before giving up
+
+    TODO the backing directory is left behind -- the opposite of
+    create_volume_directory().  Noted by dtenenba; deliberately not implemented
+    because it means an rm -rf of live database files."""
     try:
         volume = client.volumes.get(vname)
     except NotFound:
@@ -124,7 +185,7 @@ def volume_remove(vname):
             mesg = f"Docker Volume {vname} removed."
             break
         except APIError as e:
-            print(f"Error volume_remove: {vname}: {e}, tring again")
+            print(f"Error volume_remove: {vname}: {e}, trying again")
             time.sleep(2)
             count += 1
             mesg = f"Issues removing {vname}. Errors {e}"
