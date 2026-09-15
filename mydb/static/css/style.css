@@ -26,16 +26,15 @@ a {
 
 .title {
     font-family: "Calibri",Helvetica,Arial,"Lucida Grande",sans-serif;
-    padding: 0 20px;
+    padding: 6px 20px;
     background: lightgray;
     position: relative;
-    height: 50px;
-    line-height: 50px;
+    line-height: 1.4;
 }
 .sub_title {
     font-family: "Calibri",Helvetica,Arial,"Lucida Grande",sans-serif;
-    padding: 0 20px;
-    line-height: 50px;
+    padding: 6px 20px;
+    line-height: 1.5;
 }
 
 .panel-title {

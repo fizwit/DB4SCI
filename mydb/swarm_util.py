@@ -42,7 +42,7 @@ def get_volume(volume_id):
         raise AppError(f"Swarm volumes.get {volume_id} - APIError: {e}")
 
 def display_volume_list():
-    volumes = volume_list()
+    volumes = list_volume()
     header = "{:<40} {:<10} {}".format("Volume", "Driver", "Created")
     body = ""
     for volume in volumes:
@@ -52,7 +52,7 @@ def display_volume_list():
     return header, body
 
 
-def volume_list():
+def list_volume() -> list:
     """list all volumes using docker system df for size information"""
     volumes = client.volumes.list()
 
@@ -166,7 +166,7 @@ def create_docker_volume(vname):
     return volume.name
 
 
-def volume_remove(vname):
+def remove_volume(vname):
     """Remove a docker volume
     volume remove typically fails until the service if fully removed.
     Try to remove for a few times before giving up
@@ -185,7 +185,7 @@ def volume_remove(vname):
             mesg = f"Docker Volume {vname} removed."
             break
         except APIError as e:
-            print(f"Error volume_remove: {vname}: {e}, trying again")
+            print(f"Error remove_volume: {vname}: {e}, trying again")
             time.sleep(2)
             count += 1
             mesg = f"Issues removing {vname}. Errors {e}"
@@ -378,7 +378,7 @@ def admin_delete(name, username):
         String describing the results of the operation (success and failures)
     """
     result = f"Admin action requested: delete service: {name} "
-    result += f"Requested by {username}\n\n"
+    result += f"Requested by User:{username}\n\n"
     errors = []
 
     # Step 1: Get metadata from admin database
@@ -422,20 +422,7 @@ def admin_delete(name, username):
         result += f"[ERROR] {error_msg}\n"
         errors.append(error_msg)
 
-    # Step 4: Remove Docker volume (continue even if this fails)
-    try:
-        status = volume_remove(volume_name)
-        if "Issues removing" in status or "not found" in status.lower():
-            result += f"[WARN] Volume removal: {status}\n"
-            errors.append(f"Volume removal issue: {status}")
-        else:
-            result += f"[OK] Volume removed: {status}\n"
-    except Exception as e:
-        error_msg = f"Unexpected error removing volume: {e}"
-        result += f"[ERROR] {error_msg}\n"
-        errors.append(error_msg)
-
-    # Step 5: Remove Docker config (continue even if this fails)
+    # Step 4: Remove Docker config (continue even if this fails)
     try:
         status = docker_config_remove(config_name)
         if "Error" in status or "not found" in status.lower():
@@ -447,6 +434,19 @@ def admin_delete(name, username):
             result += f"[OK] Config removed: {status}\n"
     except Exception as e:
         error_msg = f"Unexpected error removing config: {e}"
+        result += f"[ERROR] {error_msg}\n"
+        errors.append(error_msg)
+
+    # Step 5: Remove Docker volume (continue even if this fails)
+    try:
+        status = remove_volume(volume_name)
+        if "Issues removing" in status or "not found" in status.lower():
+            result += f"[WARN] Volume removal: {status}\n"
+            errors.append(f"Volume removal issue: {status}")
+        else:
+            result += f"[OK] Volume removed: {status}\n"
+    except Exception as e:
+        error_msg = f"Unexpected error removing volume: {e}"
         result += f"[ERROR] {error_msg}\n"
         errors.append(error_msg)
 
