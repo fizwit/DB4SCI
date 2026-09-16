@@ -154,46 +154,6 @@ def migrate_restore():
     )
 
 
-@app.route("/pg_continue/", methods=["POST"])
-@auth_required
-@admin_required
-def pg_continue():
-    """Second half of a Postgres migrate or restore.
-
-    general_form-style flows run start to finish in one request; these two
-    cannot.  A backup from Postgres 13 or older carries md5 password hashes,
-    and loading it into a 14+ container locks the admin role out -- MyDB
-    included.  pg_pause.html asks the operator to open a psql session first,
-    this route does the restore, and pg_reset.html hands them the SQL to
-    repair the password from inside that still-authenticated session.
-    """
-    pg_action = request.form["pg_action"]
-    container_name = request.form["container_name"]
-    dbname = request.form["dbname"]
-    port = request.form["port"]
-    s3_prefix = request.form["s3_prefix"]
-
-    if pg_action == "migrate":
-        result = postgres_util.migrate_restore(dbname, port, s3_prefix)
-        header = f"Migration results for {container_name}"
-    elif pg_action == "restore":
-        result = postgres_util.restore({"dbname": dbname, "Port": port}, s3_prefix)
-        header = f"Restored {container_name} from {s3_prefix}"
-    else:
-        return render_template("404.html", title="404 Error")
-
-    return render_template(
-        "pg_reset.html",
-        title="Reset the Admin Password",
-        header=header,
-        container_name=container_name,
-        result=result,
-        pg_admin=mydb_config.PG_ADMIN,
-        reset_sql=postgres_util.admin_reset_sql(),
-        connect_cmd=postgres_util.admin_connect_cmd(port),
-    )
-
-
 @app.route("/create_form/", methods=["GET"])
 @auth_required
 def create_form():
@@ -349,67 +309,15 @@ def selected():
         )
     elif action == "restore_to":
         target_container = request.args["container_name"]
-        dbengine, info = mydb_actions.container_info(target_container, "admin")
-        if dbengine[:6] == "Error:":
-            return render_template(
-                "action_result.html", title="Restore", header="Restore", result=dbengine
-            )
-        if dbengine != "Postgres":
-            result = mydb_actions.restore(target_container, session["s3_url"])
-            return render_template(
-                "action_result.html",
-                title="Restore Completed",
-                header=f"Restored {session['restore_from']} to {target_container}\n from {session['s3_url']}",
-                result=result,
-            )
-        # Postgres: stop and make the operator hold an open session before the
-        # restore overwrites pg_authid.  See postgres_util.admin_reset_sql().
+        result = mydb_actions.restore(target_container, session["s3_url"])
         return render_template(
-            "pg_pause.html",
-            title="Restore: Open a Session First",
-            header=f"Restore {target_container} from {session['s3_url']}",
-            pg_action="restore",
-            container_name=target_container,
-            dbname=info.get("dbname", target_container),
-            port=info["Port"],
-            s3_prefix=session["s3_url"],
-            pg_admin=mydb_config.PG_ADMIN,
-            connect_cmd=postgres_util.admin_connect_cmd(info["Port"]),
+            "action_result.html",
+            title="Restore Completed",
+            header=f"Restored {session['restore_from']} to {target_container}\n from {session['s3_url']}",
+            result=result,
         )
     elif action in admin_actions:
         return mydb_actions.admin_actions(action, request.args)
-    elif action == "migrate":
-        container_name = request.args["container_name"]
-        dbengine, info = mydb_actions.container_info(container_name, "migrate")
-        if dbengine[:6] == "Error:":
-            return render_template(
-                "action_result.html", title="Migration", header="Migration", result=dbengine
-            )
-        if dbengine != "Postgres":
-            return mydb_actions.migrate_actions(action, request.args)
-        # Postgres migrates in two steps: build the empty container, stop so the
-        # operator can open a psql session, then restore.  pg_continue() picks
-        # it up from there -- see postgres_util.admin_reset_sql() for why.
-        params, error = postgres_util.migrate_create(info)
-        if error:
-            return render_template(
-                "action_result.html",
-                title="Database Migration",
-                header=f"Migration results for {container_name}",
-                result=error,
-            )
-        return render_template(
-            "pg_pause.html",
-            title="Migrate: Open a Session First",
-            header=f"Migrate {container_name}",
-            pg_action="migrate",
-            container_name=container_name,
-            dbname=params["dbname"],
-            port=params["Port"],
-            s3_prefix=params["dump_prefix"],
-            pg_admin=mydb_config.PG_ADMIN,
-            connect_cmd=postgres_util.admin_connect_cmd(params["Port"]),
-        )
     elif action in migrate_actions:
         return mydb_actions.migrate_actions(action, request.args)
     else:
