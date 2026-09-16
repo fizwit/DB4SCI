@@ -1,9 +1,11 @@
 import json
+import secrets
 import sys
 import time
 from pathlib import Path
 
 import psycopg
+from psycopg import sql
 
 from . import (
     admin_db,
@@ -142,6 +144,17 @@ def build_params_postgres(info) -> dict:
         params["dbuser"] = info["POSTGRES_USER"]
     elif "DB_USER" in info:
         params["dbuser"] = info["DB_USER"]
+    # create_init_script() needs a password to build the role.  v1 metadata
+    # carries one only sometimes (see migrate_db.display_active_containers),
+    # and whatever is set here lives only until pg_restore loads the globals
+    # dump and overwrites pg_authid -- so fall back to a random value rather
+    # than a predictable literal, in case the restore never gets that far.
+    # reset_admin_password() repairs the admin account after the restore.
+    params["dbuserpass"] = (
+        info.get("dbuserpass")
+        or info.get("POSTGRES_PASSWORD")
+        or secrets.token_urlsafe(16)
+    )
     params["Port"] = info["Port"]
     # Environtment
     params["env"] = pg_env(auth_meth="md5")
@@ -160,64 +173,81 @@ def build_params_postgres(info) -> dict:
     return params
 
 
-def admin_connect_cmd(port):
-    """psql command line that connects to a container as the MyDB admin role."""
-    return (f"PGPASSWORD=\'{mydb_config.PG_ADMIN_PASS}\' "
-            f"psql -h {mydb_config.container_host} -p {port} "
-            f"-d postgres -U {mydb_config.PG_ADMIN}")
+def reset_admin_password(conn):
+    """Put the PG_ADMIN password back after a restore.
 
+    A dump from Postgres 13 or older carries md5 password hashes.  Restoring
+    its globals overwrites pg_authid, and a 14+ container authenticates with
+    scram-sha-256, which cannot verify an md5 hash -- so every account named in
+    the dump, PG_ADMIN included, is locked out the moment the restore lands.
 
-def admin_reset_sql():
-    """SQL that puts the MyDB admin password back after a restore.
-
-    A dump taken from Postgres 13 or older carries md5 password hashes in its
-    globals.  Restoring it overwrites pg_authid on the new server, and 14+
-    containers authenticate with scram-sha-256, which cannot verify an md5
-    hash.  The admin role is locked out at that point -- including MyDB itself,
-    which is why this is handed to an operator to paste into a session opened
-    before the restore rather than run here.
+    `conn` must have been opened BEFORE the restore.  PostgreSQL authenticates
+    at connect time, so an established session keeps working even after its own
+    password hash is overwritten underneath it.  That session is the only way
+    back in, which is why the caller holds it across the restore.
     """
-    return f"ALTER ROLE {mydb_config.PG_ADMIN} WITH PASSWORD \'{mydb_config.PG_ADMIN_PASS}\';"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                sql.SQL("ALTER ROLE {} WITH PASSWORD {}").format(
+                    sql.Identifier(mydb_config.PG_ADMIN),
+                    sql.Literal(mydb_config.PG_ADMIN_PASS),
+                )
+            )
+        conn.commit()
+    except psycopg.Error as e:
+        return f"ERROR: could not reset the {mydb_config.PG_ADMIN} password: {e}"
+    return f"Reset the {mydb_config.PG_ADMIN} password after the restore."
 
 
-def migrate_create(info):
-    """First half of a migrate: build the empty container, restore nothing.
+def restore_with_open_admin(dest, s3_prefix, label):
+    """Run a restore while holding an admin session open across it.
 
-    The restore is deliberately a separate step (migrate_restore) so the UI can
-    stop in between and let an operator open a psql session -- see
-    admin_reset_sql() for why that session matters.
+    The connection is opened first and deliberately kept until after the
+    password reset -- see reset_admin_password().  If it cannot be opened we
+    refuse to restore at all, because there would be no way to recover the
+    admin account afterwards.
+    """
+    conn = pg_admin_connect("postgres", dest["Port"])
+    if conn is None:
+        return (f"Error: cannot connect to {label} as {mydb_config.PG_ADMIN} on port "
+                f"{dest['Port']}. Refusing to restore -- without this session the "
+                "admin account could not be recovered after the restore.")
+    try:
+        result = pg_restore(dest, dest, s3_prefix)
+        result += "\n" + reset_admin_password(conn)
+    finally:
+        conn.close()
+    return result
 
-    Returns: (params, None) on success, (None, error_message) on failure.
+
+def migrate(info):
+    """migrate postgres container
+    Use meta data from v1 of mydb to create new docker swarm service
     """
     dbname = info["Name"]
     if swarm_util.get_service(dbname):
-        return None, f"Container name {dbname} already in use"
+        return f"Container name {dbname} already in use"
     dump_prefix = aws_util.lastbackup_s3_prefix(dbname, mydb_config.s3_prefix_migrate)
     if dump_prefix[:5] == "Error":
-        return None, dump_prefix
+        return dump_prefix
     volume_name = f"mydb_{dbname}"
     swarm_util.create_docker_volume(volume_name)
     params = build_params_postgres(info)
     params["service_name"] = f"mydb_{dbname}"
     params["volume_name"] = volume_name
-    params["dump_prefix"] = dump_prefix
     config_ref = create_init_script(params)
+    # the hash is baked into the init script now; keep the plaintext out of
+    # params, which start_service() dumps to the log as JSON
+    del params["dbuserpass"]
 
     service, error = swarm_util.start_service(params, config_ref)
     if service is None:
-        return None, f"{error} {mydb_config.supportOrgName} has been notified"
+        return f"{error} {mydb_config.supportOrgName} has been notified"
     params["service_id"] = service.id
     wait_for_postgres(dbname, params["Port"])
-    return params, None
-
-
-def migrate_restore(dbname, port, dump_prefix):
-    """Second half of a migrate: load the backup into the container that
-    migrate_create() built.  Takes plain values rather than `params` so the
-    caller can carry them through the confirmation page."""
-    dest = {"dbname": dbname, "Port": port}
-    result = pg_restore(dest, dest, dump_prefix)
-    print(f"==== DEBUG: postgres_util.migrate_restore: {dbname}\n{result}")
+    result = restore_with_open_admin(params, dump_prefix, dbname)
+    print(f"==== DEBUG: postgres_util.migrate: {dbname}\n{result}")
     return result
 
 
@@ -225,7 +255,7 @@ def restore(info, s3_prefix):
     """Restore an existing container from an S3 backup prefix.
     Called from mydb_actions.restore()."""
     dest = {"dbname": info.get("dbname", info["Name"]), "Port": info["Port"]}
-    return pg_restore(dest, dest, s3_prefix)
+    return restore_with_open_admin(dest, s3_prefix, info["Name"])
 
 
 def create(params):
