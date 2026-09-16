@@ -194,7 +194,8 @@ def reset_admin_password(conn):
                     sql.Literal(mydb_config.PG_ADMIN_PASS),
                 )
             )
-        conn.commit()
+        if not conn.autocommit:
+            conn.commit()
     except psycopg.Error as e:
         return f"ERROR: could not reset the {mydb_config.PG_ADMIN} password: {e}"
     return f"Reset the {mydb_config.PG_ADMIN} password after the restore."
@@ -203,19 +204,21 @@ def reset_admin_password(conn):
 def restore_with_open_admin(dest, s3_prefix, label):
     """Run a restore while holding an admin session open across it.
 
-    The connection is opened first and deliberately kept until after the
-    password reset -- see reset_admin_password().  If it cannot be opened we
-    refuse to restore at all, because there would be no way to recover the
-    admin account afterwards.
+    The connection is opened first and handed to pg_restore(), which uses it
+    to repair the admin password between the globals restore and the per
+    database dumps -- see reset_admin_password() for why the ordering matters.
+    If it cannot be opened we refuse to restore at all, because there would be
+    no way to recover the admin account afterwards.
     """
     conn = pg_admin_connect("postgres", dest["Port"])
     if conn is None:
         return (f"Error: cannot connect to {label} as {mydb_config.PG_ADMIN} on port "
                 f"{dest['Port']}. Refusing to restore -- without this session the "
                 "admin account could not be recovered after the restore.")
+    # CREATE DATABASE cannot run inside a transaction block
+    conn.autocommit = True
     try:
-        result = pg_restore(dest, dest, s3_prefix)
-        result += "\n" + reset_admin_password(conn)
+        result = pg_restore(dest, dest, s3_prefix, admin_conn=conn)
     finally:
         conn.close()
     return result
@@ -551,7 +554,24 @@ def extract_dbname(s3_object):
     return instance, dbname, dumpfile
 
 
-def pg_restore(source, dest, S3_prefix):
+def ensure_database(conn, dbname):
+    """CREATE DATABASE <dbname> unless it already exists.
+
+    pg_restore --dbname needs the database to exist first, and the globals
+    dump cannot supply it: backup() uses `pg_dumpall -g`, which emits roles and
+    tablespaces only.  create_init_script() makes just the one database named
+    after the container, so an instance holding several databases needs the
+    rest created here.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
+        if cur.fetchone():
+            return f"database {dbname} already exists\n"
+        cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname)))
+    return f"created database {dbname}\n"
+
+
+def pg_restore(source, dest, S3_prefix, admin_conn=None):
     """Restore Postgres database from S3
     <source> and <dest> are container data structure: like `params`
     Postgres backup has a minimum of 3 files; control file, SQL file, dump file
@@ -574,7 +594,7 @@ def pg_restore(source, dest, S3_prefix):
         for backup_file in backup_files:
             path = Path(backup_file)
             base_file = path.name
-            result_msg = f" s3 objects: {base_file}..."
+            result_msg += f" s3 objects: {base_file}...\n"
     psql_cmd = (f"psql --host {mydb_config.container_host} "
         f"--port {dest['Port']} "
         f"--dbname postgres -U {mydb_config.PG_ADMIN}")
@@ -592,20 +612,32 @@ def pg_restore(source, dest, S3_prefix):
     if not SQL_file:
         return "Could not find a SQL file for PostgreSQL restore. This is bad."
 
-    result_msg += f"Restoring: {dest['dbname']}"
+    result_msg += f"Restoring: {dest['dbname']}\n"
     if dest.get("SQL", "yes") != "no":
         success, msg = backup_util.s3_piped_restore(
             SQL_file, psql_cmd, env=password_env
         )
         if not success:
             return msg
-    result_msg += msg
+        result_msg += msg
+
+    # The globals dump has just overwritten pg_authid with the source system's
+    # md5 password hashes.  Every pg_restore below opens its OWN connection
+    # using PGPASSWORD, and a 14+ container authenticates with scram-sha-256,
+    # which cannot verify an md5 hash -- so unless the admin password is
+    # repaired right here, all of them fail to authenticate and the databases
+    # come back empty.  admin_conn was opened before the restore and is still
+    # authenticated; see reset_admin_password().
+    if admin_conn is not None:
+        result_msg += reset_admin_password(admin_conn) + "\n"
 
     # Restore data from dump files
     for backup_file in backup_files:
         if ".dump" in backup_file[-5:]:
             instance, dbname, _ = extract_dbname(backup_file)
             print(f"Restoring {instance}{dbname} from {backup_file}")
+            if admin_conn is not None:
+                result_msg += ensure_database(admin_conn, dbname)
             restore_command = pg_restore.replace("XXXX", dbname)
             success, msg = backup_util.s3_file_restore(backup_file, restore_command, env=password_env)
             if not success:
