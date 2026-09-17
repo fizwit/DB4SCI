@@ -2,6 +2,7 @@ import json
 import secrets
 import sys
 import time
+from datetime import date
 from pathlib import Path
 
 import psycopg
@@ -201,7 +202,90 @@ def reset_admin_password(conn):
     return f"Reset the {mydb_config.PG_ADMIN} password after the restore."
 
 
-def restore_with_open_admin(dest, s3_prefix, label):
+# Source releases that store passwords as md5 hashes by default.  Postgres 14
+# switched the default to scram-sha-256, so anything from 14 on restores into a
+# modern container without locking its accounts out.
+MD5_ERA_IMAGES = ("postgres:9", "postgres:13")
+
+
+def source_image(info):
+    """Image string from container metadata, case insensitively.
+
+    v1 metadata spells the key "Image"; v2 writes "image".  Returns "" when the
+    metadata carries neither.
+    """
+    for key, value in info.items():
+        if key.lower() == "image" and isinstance(value, str):
+            return value.strip()
+    return ""
+
+
+def source_has_md5_passwords(info):
+    """True when the backup came from a release that stored md5 password hashes.
+
+    Only those need reset_user_passwords(): their role passwords cannot be
+    verified by a 14+ container, so every account is locked out after the
+    restore.  A backup from 14 or later carries scram verifiers that keep
+    working, and rewriting those passwords would be a gratuitous lockout of
+    accounts that were fine.
+    """
+    return source_image(info).lower().startswith(MD5_ERA_IMAGES)
+
+
+def reset_user_passwords(conn):
+    """Give every restored login role a known password.
+
+    Roles come out of the globals dump carrying the source system's md5
+    hashes.  A Postgres 14+ container authenticates with scram-sha-256 and
+    cannot verify an md5 hash, so every account is locked out even though its
+    data restored fine.  This resets them all to ChangeMe@YYYY.MM.DD so owners
+    can get back in and set their own.
+
+    Two kinds of role are skipped:
+      - PG_ADMIN, which reset_admin_password() has already repaired; resetting
+        it here would lock MyDB itself back out.
+      - the built in pg_* roles, which are reserved, cannot log in, and reject
+        ALTER ROLE.  sql_* is filtered alongside them purely defensively; the
+        sql_* names in a database are information_schema tables, not roles.
+
+    `conn` must be an admin session; see reset_admin_password() for why it has
+    to have been opened before the restore.
+    """
+    new_password = f"ChangeMe@{date.today().strftime('%Y.%m.%d')}"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rolname FROM pg_roles
+                WHERE rolcanlogin
+                  AND rolname <> %s
+                  AND rolname NOT LIKE 'pg\\_%%'
+                  AND rolname NOT LIKE 'sql\\_%%'
+                ORDER BY rolname
+                """,
+                (mydb_config.PG_ADMIN,),
+            )
+            roles = [row[0] for row in cur.fetchall()]
+            for rolname in roles:
+                cur.execute(
+                    sql.SQL("ALTER ROLE {} WITH PASSWORD {}").format(
+                        sql.Identifier(rolname), sql.Literal(new_password)
+                    )
+                )
+        if not conn.autocommit:
+            conn.commit()
+    except psycopg.Error as e:
+        return f"ERROR: could not reset user passwords: {e}\n"
+
+    if not roles:
+        return "No restored login roles needed a password reset.\n"
+    report = f"Reset {len(roles)} account(s) to the password: {new_password}\n"
+    report += "Owners must change it.  Accounts reset:\n"
+    report += "".join(f"    {r}\n" for r in roles)
+    return report
+
+
+def restore_with_open_admin(dest, s3_prefix, label, reset_users=False):
     """Run a restore while holding an admin session open across it.
 
     The connection is opened first and handed to pg_restore(), which uses it
@@ -218,7 +302,8 @@ def restore_with_open_admin(dest, s3_prefix, label):
     # CREATE DATABASE cannot run inside a transaction block
     conn.autocommit = True
     try:
-        result = pg_restore(dest, dest, s3_prefix, admin_conn=conn)
+        result = pg_restore(dest, dest, s3_prefix, admin_conn=conn,
+                            reset_users=reset_users)
     finally:
         conn.close()
     return result
@@ -249,7 +334,9 @@ def migrate(info):
         return f"{error} {mydb_config.supportOrgName} has been notified"
     params["service_id"] = service.id
     wait_for_postgres(dbname, params["Port"])
-    result = restore_with_open_admin(params, dump_prefix, dbname)
+    result = restore_with_open_admin(
+        params, dump_prefix, dbname, reset_users=source_has_md5_passwords(info)
+    )
     print(f"==== DEBUG: postgres_util.migrate: {dbname}\n{result}")
     return result
 
@@ -258,7 +345,9 @@ def restore(info, s3_prefix):
     """Restore an existing container from an S3 backup prefix.
     Called from mydb_actions.restore()."""
     dest = {"dbname": info.get("dbname", info["Name"]), "Port": info["Port"]}
-    return restore_with_open_admin(dest, s3_prefix, info["Name"])
+    return restore_with_open_admin(
+        dest, s3_prefix, info["Name"], reset_users=source_has_md5_passwords(info)
+    )
 
 
 def create(params):
@@ -571,7 +660,7 @@ def ensure_database(conn, dbname):
     return f"created database {dbname}\n"
 
 
-def pg_restore(source, dest, S3_prefix, admin_conn=None):
+def pg_restore(source, dest, S3_prefix, admin_conn=None, reset_users=False):
     """Restore Postgres database from S3
     <source> and <dest> are container data structure: like `params`
     Postgres backup has a minimum of 3 files; control file, SQL file, dump file
@@ -644,6 +733,16 @@ def pg_restore(source, dest, S3_prefix, admin_conn=None):
                 result_msg += f"Error restoring {dbname} from {backup_file}:\n{msg}\n"
             else:
                 result_msg += msg
+
+    # Roles restored from the globals dump still carry md5 hashes and cannot
+    # authenticate against a 14+ container, so their data is unreachable until
+    # the passwords are replaced.  Done last so it also covers the databases
+    # that were just restored.
+    if admin_conn is not None and reset_users:
+        result_msg += "\n" + reset_user_passwords(admin_conn)
+    elif admin_conn is not None:
+        result_msg += ("\nSource is Postgres 14 or later, so its scram password "
+                       "verifiers restored intact; accounts left untouched.\n")
 
     result_msg += "Database restore completed from S3."
     return result_msg
