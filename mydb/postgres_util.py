@@ -547,9 +547,11 @@ def pg_audit(Info):
     # 1. List all users/roles
     report.append("USERS AND ROLES:")
     report.append("-" * 80)
+    # exclude pg_* reserved names by PostgreSQL
     cur.execute("""
         SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolcanlogin
         FROM pg_roles
+        WHERE rolname NOT LIKE 'pg\\_%'
         ORDER BY rolname
     """)
     users = cur.fetchall()
