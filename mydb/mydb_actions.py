@@ -44,7 +44,7 @@ def admin_actions(action, args):
     elif action == "backup":
         title = "Backup Service"
         if dbengine == "Postgres":
-            result = postgres_util.pg_backup(info)
+            result = postgres_util.pg_backup(info, "Admin")
         elif dbengine == "MariaDB":
             result = mariadb_util.mariadb_backup(info)
         else:
@@ -166,7 +166,7 @@ def user_backup(Name):
     data = admin_db.get_container_data(state.c_id)
     info = data["Info"]
     if info["dbengine"] == "Postgres":
-        result = postgres_util.backup(state.c_id, info, "User")
+        result = postgres_util.pg_backup(info, "User", state.c_id)
     elif info["dbengine"] == "MariaDB":
         result = mariadb_util.backup(state.c_id, info, "User")
     elif data["dbengine"] == "MongoDB":

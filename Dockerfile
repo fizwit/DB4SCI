@@ -9,7 +9,21 @@ ENV TZ='America/Los_Angeles'
 ENV DB4SCI_ENV=dev
 
 # Update the system and install packages
+#
+# The Postgres client must be the newest major we deploy: pg_dump/pg_dumpall
+# can dump any server at or below their own major version, but refuse a server
+# newer than themselves.  Debian's own postgresql-client is too old (15 on
+# bookworm), so pull the current client from the PGDG apt repo.  Bump the
+# postgresql-client-NN version below whenever a newer Postgres major is adopted.
 RUN apt-get update -y && \
+    DEBIAN_FRONTEND=noninteractive \
+    apt-get -y --no-install-recommends install ca-certificates curl gnupg && \
+    install -d /usr/share/postgresql-common/pgdg && \
+    curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc && \
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive \
     apt-get -y --no-install-recommends install tzdata \
     libldap2-dev \
@@ -19,12 +33,11 @@ RUN apt-get update -y && \
     python3-dev \
     pkg-config \
     awscli \
-    postgresql postgresql-client \
+    postgresql-client-18 \
     libmariadb-dev libmariadb-dev-compat mariadb-client \
     gcc \
     vim \
     cron \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create the sttrweb user and data directory

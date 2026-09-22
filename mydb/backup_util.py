@@ -483,7 +483,7 @@ def backup_all():
         if 'dbengine' in info:
             print(f"Back_all: dbengine: {info['dbengine']}")
             if info['dbengine'] == 'Postgres':
-                message = postgres_util.backup(c_id, info, 'Admin')
+                message = postgres_util.pg_backup(info, 'Admin', c_id)
                 msg += message
     msg += f"End: {time.strftime('%A, %B %d, %Y %H:%M:%S')}\n"
     send_mail("MyDB: backup_all db", msg, mydb_config.backup_admin_mail)
