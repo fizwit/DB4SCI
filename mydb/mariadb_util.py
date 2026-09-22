@@ -36,12 +36,9 @@ def mariadb_admin_connect(port):
     :returns  MariaDB connection object/None
     """
     iport = int(port)
-    dbuser = mydb_config.accounts[dbengine]["admin"]
-    dbpass = mydb_config.accounts[dbengine]["admin_pass"]
+    dbpass = mydb_config.MARIADB_ROOT_PASSWORD
     try:
-        conn = mariadb.connect(
-            host=mydb_config.container_host, port=iport, user=dbuser, password=dbpass
-        )
+        conn = mariadb.connect(host=mydb_config.container_host, port=iport, user="root", password=dbpass)
     except mariadb.Error as e:
         print("ERROR: mariadb_admin_connect: %s" % e)
         return None
@@ -66,32 +63,6 @@ def auth_mariadb(dbuser, dbpass, port):
         return False
     conn.close()
     return True
-
-
-def create_init_script(params):
-    """create MariaDB init script to create user account and default database
-
-    MariaDB initialization scripts in /docker-entrypoint-initdb.d/ are executed
-    automatically when the container starts for the first time (when data directory is empty).
-    """
-    dbuser = params['dbuser']
-    dbname = params['dbname']
-    dbuserpass = params['dbuserpass']
-    sql_init_script = f"""-- Create Database
-CREATE DATABASE IF NOT EXISTS `{dbname}`;
-
--- Create User
-CREATE USER IF NOT EXISTS '{dbuser}'@'%' IDENTIFIED BY '{dbuserpass}';
-
--- Grant privileges
-GRANT ALL PRIVILEGES ON `{dbname}`.* TO '{dbuser}'@'%' WITH GRANT OPTION;
-FLUSH PRIVILEGES;
-"""
-    data = sql_init_script.encode("utf-8")
-    config_name = f"mydb_{params['Name']}_init.sql"
-    params["config_name"] = config_name
-    config_ref = swarm_util.create_config(config_name, data)
-    return config_ref
 
 
 def mariadb_audit(Info):
@@ -215,7 +186,7 @@ def maria_env() -> list:
     Sets up the root (admin) user credentials that MyDB uses for backups and management
     """
     env = [
-        f"MARIADB_ROOT_PASSWORD={mydb_config.accounts[dbengine]['admin_pass']}",
+        f"MARIADB_ROOT_PASSWORD={mydb_config.MARIADB_ROOT_PASS}"
         f"MARIADB_USER={mydb_config.accounts[dbengine]['admin']}",
         f"TZ={mydb_config.TZ}",
     ]
@@ -335,10 +306,6 @@ def create(params):
         return f"Service name {params['service_name']} already in use"
 
     swarm_util.create_docker_volume(params["volume_name"])
-
-    config_ref = create_init_script(params)
-    if config_ref is None:
-        return "Error: creating Docker Config"
 
     config_data = mydb_config.dbs[params["dbengine"]]
     params["mapped_db_vol"] = mydb_config.mapped_volume(params["dbengine"], params["image"])

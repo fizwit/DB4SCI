@@ -423,7 +423,7 @@ def admin(cmd):
         title = "MyDB Administrative Features"
         body = admin_help()
     elif cmd == "session_info":
-        return render_template("session.html", title="Session Variables")
+        return render_template("session.html", title="Session Variables", config=mydb_config)
     elif cmd == "restore":
         title = "Restore Database from Backup"
         container_names = migrate_db.list_container_names()

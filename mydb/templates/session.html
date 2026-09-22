@@ -14,6 +14,11 @@
     <h3>Login Status: {{ session.get('logged_in', 'logged_in not set!') }}</h3>
     <h3>eMail: {{ session.get('mail', 'No email') }}</h3>
     <h3>Admin User: {{ session.get('admin_user', 'Not set') }}</h3>
+    <br/>
+    <H3>Configuration</H3>
+    <h3>DB4SCI ENV: {{ config.DB4SCI_ENV }}</h3>
+    <h3>S3 Production Prefix: {{ config.s3_prefix_prod }}</h3>
+    <h3>S3 Development Prefix: {{ config.s3_prefix_dev }}</h3>
   </div>
 </div>
 {% endblock %}
