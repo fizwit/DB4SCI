@@ -403,13 +403,30 @@ def create(params):
     return res
 
 
-def backup(c_id, info, backup_type):
-    """Backup all databases for a given Postgres container
-    type: str ['User', 'Admin']
+def pg_backup(info, backup_type="User", c_id=None):
+    """Backup all databases for a given Postgres container.
+
+    Runs pg_dumpall/pg_dump here in DB4SCI over the network (--host/--port) and
+    pipes each dump straight to S3.  This works across Postgres majors because
+    the client tools can dump any server at or below their own major version --
+    so DB4SCI just has to ship a client at least as new as the newest server it
+    deploys (see the postgresql-client version in the Dockerfile).  It also
+    works regardless of which swarm node the container runs on, since it only
+    needs the published TCP port, not local access to the container.
+
+    Args:
+        info (dict): container metadata (needs Name and Port)
+        backup_type (str): one of ['User', 'Admin'] -- recorded in the backup log
+        c_id: admin_db container id for logging; looked up from Name when omitted
     """
     Name = info["Name"]
-    backup_id, prefix = aws_util.create_backup_prefix(Name)
+    if c_id is None:
+        state = admin_db.get_container_state(Name)
+        if state is None:
+            return f"Error: container {Name} not found in Admin DB; cannot back up."
+        c_id = state.c_id
 
+    backup_id, prefix = aws_util.create_backup_prefix(Name)
     s3_url = f"{mydb_config.AWS_BUCKET_NAME}{prefix}"
 
     # Dump postgres globals (roles, tablespaces, etc.)
@@ -451,7 +468,8 @@ def backup(c_id, info, backup_type):
         return message
     message += msg
 
-    # Get list of user databases to be backed up
+    # Get list of user databases to be backed up.  psycopg works across server
+    # versions, so this query still runs from DB4SCI over the network.
     try:
         connection = psycopg.connect(
             host=mydb_config.container_host,
