@@ -41,7 +41,7 @@ def get_volume(volume_id):
     except APIError as e:
         raise AppError(f"Swarm volumes.get {volume_id} - APIError: {e}")
 
-def display_volume_list():
+def display_volume_list() -> tuple[str, str]:
     volumes = list_volume()
     header = "{:<40} {:<10} {}".format("Volume", "Driver", "Created")
     body = ""
@@ -52,7 +52,7 @@ def display_volume_list():
     return header, body
 
 
-def list_volume() -> list:
+def list_volume() -> list[dict[str, str]]:
     """list all volumes using docker system df for size information"""
     volumes = client.volumes.list()
 

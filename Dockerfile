@@ -15,9 +15,11 @@ RUN apt-get update -y && \
     libldap2-dev \
     libsasl2-dev \
     libssl-dev \
+    libpq-dev \
+    python3-dev \
     pkg-config \
     awscli \
-    postgresql postgresql-contrib libpq-dev python3-dev \
+    postgresql postgresql-client \
     libmariadb-dev libmariadb-dev-compat mariadb-client \
     gcc \
     vim \

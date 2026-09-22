@@ -164,13 +164,13 @@ def user_backup(Name):
     if state is None:
         return f"Database container not found: {Name}"
     data = admin_db.get_container_data(state.c_id)
-    info["cid"] = cid
+    info = data["Info"]
     if info["dbengine"] == "Postgres":
-        result = postgres_util.backup(info, "User")
+        result = postgres_util.backup(state.c_id, info, "User")
     elif info["dbengine"] == "MariaDB":
-        result = mariadb_util.backup(info, "User")
-    elif info["dbengine"] == "MongoDB":
-        result = mongodb_util.backup(info, "User")
+        result = mariadb_util.backup(state.c_id, info, "User")
+    elif data["dbengine"] == "MongoDB":
+        result = mongodb_util.backup(state.c_id, data, "User")
     else:
         result = f"Unsupported database engine: {info['dbengine']}"
     return result
