@@ -1,6 +1,9 @@
-from flask import Flask, g
+from flask import Flask, g, render_template
 import os
+import traceback
 from datetime import timedelta
+
+from .errors import AppError
 
 # Create the app instance at module level so `from mydb import app` works.
 # mydb_views.py registers its routes with @app.route(...) against this object.
@@ -23,6 +26,16 @@ def close_db(error):
     db = g.pop("db", None)
     if db is not None:
         db.close()
+
+
+# Catch AppError anywhere in a view and show error.html with its message,
+@app.errorhandler(AppError)
+def handle_app_error(error):
+    from . import mydb_config
+
+    message = str(error) or "An application error occurred."
+    details = traceback.format_exc() if mydb_config.FLASK_DEBUG == "1" else ""
+    return render_template("error.html", message=message, details=details), 500
 
 
 # Context processor to inject branding variables into all templates
