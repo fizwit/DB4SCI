@@ -122,30 +122,30 @@
         <div class="form-grid">
           <div class="form-field">
             <label for="owner">Contact Name <span class="required">*</span></label>
-            <input type="text" name="owner" id="owner" tabindex="60"
+            <input type="text" name="owner" id="owner" tabindex="90"
                    value="{{ session.displayName if session.displayName else '' }}" required>
           </div>
 
           <div class="form-field">
             <label for="contact">Contact Email <span class="required">*</span></label>
-            <input type="email" name="contact" id="contact" tabindex="70"
+            <input type="email" name="contact" id="contact" tabindex="91"
                    value="{{ session.mail if session.mail else '' }}" required>
           </div>
 
           <div class="form-field">
             <label for="app_name">Application Name (optional)</label>
-            <input type="text" name="app_name" id="app_name" tabindex="90">
+            <input type="text" name="app_name" id="app_name" tabindex="60">
           </div>
 
           <div class="form-field full-width">
             <label for="department">Department<span class="required">*</span></label>
-            <input type="text" name="department" id="department" tabindex="80"
+            <input type="text" name="department" id="department" tabindex="90"
                    value="{{ session.department if session.department else ''}}" required>
           </div>
 
           <div class="form-field full-width">
             <label for="description">Description <span class="required">*</span></label>
-            <input type="text" name="description" id="description" tabindex="80"
+            <input type="text" name="description" id="description" tabindex="65"
                    placeholder="Brief description of the database purpose" required>
           </div>
 
