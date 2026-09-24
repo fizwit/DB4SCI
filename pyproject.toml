@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "DB4SCI"
-version = "2.0.4.1"
+version = "2.0.4.2"
 description = "Database as a Service for Science — self-service database container management (MariaDB, PostgreSQL, MongoDB)."
 readme = "README.md"
 requires-python = ">=3.11"
