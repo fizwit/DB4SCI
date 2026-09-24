@@ -5,8 +5,6 @@ import time
 from datetime import date
 
 import mariadb
-from jinja2 import Template
-
 from mydb import migrate_db
 
 from . import (
@@ -66,22 +64,16 @@ def create_init_script(params):
     automatically when the container starts for the first time (when data directory is empty).
     """
 
-    sql_init_script = """-- Create Database
-CREATE DATABASE IF NOT EXISTS `{{dbname}}`;
-
--- Create User
-CREATE USER IF NOT EXISTS '{{dbuser}}'@'%' IDENTIFIED BY '{{dbuserpass}}';
-
--- Grant privileges
-GRANT ALL PRIVILEGES ON `{{dbname}}`.* TO '{{dbuser}}'@'%' WITH GRANT OPTION;
+    sql_init_script = f"""-- Grant privileges
+GRANT ALL PRIVILEGES ON *.* TO '{{dbuser}}'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 """
 
-    template = Template(sql_init_script)
-    rendered_output = template.render(params)
-    params["config_name"] = f"mydb_{params['Name']}_init.sql"
-    target_path = "/docker-entrypoint-initdb.d/init.sql"
-    return swarm_util.create_config(params, rendered_output, target_path)
+    data = sql_init_script.encode("utf-8")
+    config_name = f"mydb_{params['Name']}_init.sql"
+    params["config_name"] = config_name
+    config_ref = swarm_util.create_config(config_name, data)
+    return config_ref
 
 
 def mariadb_audit(Info):
@@ -295,7 +287,8 @@ def migrate(info):
     params["service_name"] = service_name
     params["volume_name"] = volume_name
 
-    service, error = swarm_util.start_service(params, None)
+    config_ref = create_init_script(params)
+    service, error = swarm_util.start_service(params, config_ref)
     if service is None:
         return f"{error} {mydb_config.supportOrgName} has been notified"
 
@@ -342,7 +335,8 @@ def create(params):
         params["labels"][label] = params[label]
     params["labels"]["touched"] = touched.create_date_string()
 
-    service, error = swarm_util.start_service(params, None)
+    config_ref = create_init_script(params)
+    service, error = swarm_util.start_service(params, config_ref)
     if service is None:
         return f"MariaDB Start Service: {error}\n{mydb_config.supportOrgName} has been notified"
 

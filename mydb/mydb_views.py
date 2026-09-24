@@ -207,7 +207,7 @@ admin_actions = [
     "audit_db",
     "audit_mysql",
     "admin_delete",
-    "restore",
+    "restore_from",
     "connection",
     "services",
 ]
@@ -228,26 +228,26 @@ def select_container():
         return render_template("404.html", title="404 Error")
     container_names.sort()
     if action == "list_s3":
-        title = "View S3 Backups"
+        header = "View S3 Backups"
     elif action == "backup":
-        title = "Backup Container Database"
-    elif action == "restore":
-        title = "Select Container to Restore from S3 Backup"
+        header = "Backup Container Database"
+    elif action == "restore_from":
+        header = "Select Container to Restore from S3 Backup"
     elif action == "admin_metadata":
-        title = "Select Container to get MetaData"
+        header = "Select Container to get MetaData"
     elif action in ["audit_db"]:
-        title = "Select Container to Audit"
+        header = "Select Container to Audit"
     elif action in migrate_actions:
-        title = "Select Container from MigrateDB"
+        header = "Select Container from MigrateDB"
     elif action == "admin_delete":
-        title = "Select Container to Delete"
+        header = "Select Container to Delete"
     else:
-        title = "Select Service"
+        header = "Select Service"
     return render_template(
         "select_item.html",
         dbaction=action,
-        title=title,
-        header="Select Container Name",
+        title="Select Container Name",
+        header=header,
         placeholder="Container Name",
         items=container_names,
     )
@@ -283,37 +283,43 @@ def selected():
             title="MigrateDB Data",
             header=f"Meta data for {container_name}",
         )
-    elif action == "restore":
+    elif action == "restore_from":
         session["restore_from"] = container_name
-        backup_prefixes = aws_util.parse_s3_backup_list(container_name, mydb_config.s3_prefix_prod)
+        if mydb_config.DB4SCI_ENV == "prod":
+            backup_prefixes = aws_util.parse_s3_backup_list(container_name, mydb_config.s3_prefix_prod)
+        else:
+            backup_prefixes = aws_util.parse_s3_backup_list(container_name, mydb_config.s3_prefix_dev)
         return render_template(
             "select_item.html",
-            title="Select a S3 Backup",
+            title="Select a S3 Prefix",
             header="Select S3 Backup Prefix",
             placeholder="S3 backup prefix",
             items=backup_prefixes,
             dbaction="s3_select",
         )
     elif action == "s3_select":
-        s3_url = request.args["container_name"]
-        session["s3_url"] = s3_url
-        print(f"DEBUG: restore s3_url: {s3_url}")
+        # s3_url is returned through the variable <container_name> from select_item.html
+        session["s3_url"] = container_name
+        print(f"DEBUG: restore s3_url: {container_name}")
         container_names = admin_db.list_container_names()
+        container_names.sort()
         return render_template(
             "select_item.html",
-            dbaction="restore_to",
             title="Select Target Container for Restore",
-            header="Select Target Container",
+            header="Select Target Container to Restore to",
             placeholder="Container Name",
             items=container_names,
+            dbaction="restore_to",
         )
     elif action == "restore_to":
         target_container = request.args["container_name"]
         result = mydb_actions.restore(target_container, session["s3_url"])
+        container_names = admin_db.list_container_names()
         return render_template(
             "action_result.html",
             title="Restore Completed",
             header=f"Restored {session['restore_from']} to {target_container}\n from {session['s3_url']}",
+            items=container_names,
             result=result,
         )
     elif action in admin_actions:
