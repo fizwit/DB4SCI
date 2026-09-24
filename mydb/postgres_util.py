@@ -369,7 +369,7 @@ def create(params):
     params["mapped_db_vol"] = mydb_config.mapped_volume(dbengine, params["image"])
     params["default_port"] = config_data["default_port"]
     params["service_user"] = config_data["service_user"]  # 'postgres'
-    params["Port"] = admin_db.get_max_port()
+    params["Port"] = admin_db.get_avail_port()
     params["env"] = pg_env()
     del params["dbuserpass"]
     params["labels"] = {}

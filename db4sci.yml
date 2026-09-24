@@ -13,8 +13,6 @@ services:
             # every database volume; it has to land on the shared storage, so
             # SWARM_DEVICE is bind mounted here at the same path.
             - ${SWARM_DEVICE}:${SWARM_DEVICE}
-        env_file:
-            - .env
         environment:
             TZ: "America/Los_Angeles"
             PYTHONUNBUFFERED: "1"
@@ -30,7 +28,7 @@ services:
             SQLALCHEMY_MIGRATE_URI: "${SQLALCHEMY_MIGRATE_URI}"
             PG_ADMIN: "${PG_ADMIN}"
             PG_ADMIN_PASS: "${PG_ADMIN_PASS}"
-
+            MARIADB_ROOT_PASSWORD: "${MARIADB_ROOT_PASSWORD}"
         labels:
             - "org.fredhutch.app.owner=jfdey@fredhutch.org"
             - "org.fredhutch.description=MyDB DBaaS Application"

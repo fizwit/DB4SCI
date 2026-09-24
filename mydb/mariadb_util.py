@@ -2,6 +2,7 @@ from calendar import c
 import json
 import os
 import time
+from datetime import date
 
 import mariadb
 from jinja2 import Template
@@ -18,15 +19,7 @@ from . import (
 )
 from .send_mail import send_mail
 
-"""
-TLS tutorial: https://www.cyberciti.biz/faq/how-to-setup-mariadb-ssl-and-secure-connections-from-clients/
-containers start with environment variables
-MARIADB_ROOT_PASSWORD
-Can also create a separate non-root user (set MARIADB_USER and MARIADB_PASSWORD
-"""
-
 dbengine = "MariaDB"
-FiftyGB = 53687091200
 
 
 def mariadb_admin_connect(port):
@@ -63,6 +56,32 @@ def auth_mariadb(dbuser, dbpass, port):
         return False
     conn.close()
     return True
+
+
+def create_init_script(params):
+    """This function is not needed or currently used. It might be handy in the future if
+    we need to create a custom init script for MariaDB, to set memory limits or other settings.
+
+    MariaDB initialization scripts in /docker-entrypoint-initdb.d/ are executed
+    automatically when the container starts for the first time (when data directory is empty).
+    """
+
+    sql_init_script = """-- Create Database
+CREATE DATABASE IF NOT EXISTS `{{dbname}}`;
+
+-- Create User
+CREATE USER IF NOT EXISTS '{{dbuser}}'@'%' IDENTIFIED BY '{{dbuserpass}}';
+
+-- Grant privileges
+GRANT ALL PRIVILEGES ON `{{dbname}}`.* TO '{{dbuser}}'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+"""
+
+    template = Template(sql_init_script)
+    rendered_output = template.render(params)
+    params["config_name"] = f"mydb_{params['Name']}_init.sql"
+    target_path = "/docker-entrypoint-initdb.d/init.sql"
+    return swarm_util.create_config(params, rendered_output, target_path)
 
 
 def mariadb_audit(Info):
@@ -181,13 +200,15 @@ def mariadb_audit(Info):
     return "\n".join(report)
 
 
-def maria_env() -> list:
+def maria_env(params) -> list:
     """create MariaDB Env
     Sets up the root (admin) user credentials that MyDB uses for backups and management
     """
     env = [
-        f"MARIADB_ROOT_PASSWORD={mydb_config.MARIADB_ROOT_PASS}"
-        f"MARIADB_USER={mydb_config.accounts[dbengine]['admin']}",
+        f"MARIADB_ROOT_PASSWORD={mydb_config.MARIADB_ROOT_PASSWORD}",
+        f"MARIADB_USER={params['dbuser']}",
+        f"MARIADB_PASSWORD={params['dbuserpass']}",
+        f"MARIADB_DATABASE={params['dbname']}",
         f"TZ={mydb_config.TZ}",
     ]
     return env
@@ -225,7 +246,13 @@ def build_params_mariadb(info) -> dict:
     params["Port"] = info["Port"]
 
     # Environment
-    params["env"] = maria_env()
+    params["env"] = [
+        f"MARIADB_ROOT_PASSWORD={mydb_config.MARIADB_ROOT_PASSWORD}",
+        f"MARIADB_USER={info['DB_USER']}",
+        f"MARIADB_PASSWORD='ChangeMe@{date.today().strftime('%Y.%m.%d')}'",
+        f"MARIADB_DATABASE={info['DB_NAME']}",
+        f"TZ={mydb_config.TZ}",
+    ]
 
     params["labels"] = {
         "Name": params["Name"],
@@ -268,11 +295,7 @@ def migrate(info):
     params["service_name"] = service_name
     params["volume_name"] = volume_name
 
-    config_ref = create_init_script(params)
-    if config_ref is None:
-        return "Error: creating Docker Config"
-
-    service, error = swarm_util.start_service(params, config_ref)
+    service, error = swarm_util.start_service(params, None)
     if service is None:
         return f"{error} {mydb_config.supportOrgName} has been notified"
 
@@ -311,17 +334,17 @@ def create(params):
     params["mapped_db_vol"] = mydb_config.mapped_volume(params["dbengine"], params["image"])
     params["default_port"] = config_data["default_port"]
     params["service_user"] = config_data["service_user"]  # 'root'
-    params["Port"] = admin_db.get_max_port()
-    params["env"] = maria_env()
+    params["Port"] = admin_db.get_avail_port()
+    params["env"] = maria_env(params)
     del params["dbuserpass"]
     params["labels"] = {}
     for label in mydb_config.mydb_v1_meta_data:
         params["labels"][label] = params[label]
     params["labels"]["touched"] = touched.create_date_string()
 
-    service, error = swarm_util.start_service(params, config_ref)
+    service, error = swarm_util.start_service(params, None)
     if service is None:
-        return f"{error} {mydb_config.supportOrgName} has been notified"
+        return f"MariaDB Start Service: {error}\n{mydb_config.supportOrgName} has been notified"
 
     wait_for_mariadb(params["Port"])
     res = "Your MariaDB database server has been created. Use the following command "
@@ -356,13 +379,13 @@ def backup(c_id, info, backup_type):
     command += f"--host={mydb_config.container_host} "
     command += f"-P {info['Port']} "
     command += "-u root "
-    command += f"-p{mydb_config.accounts[dbengine]['admin_pass']} "
+    command += f"-p{mydb_config.MARIADB_ROOT_PASSWORD} "
     command += "--single-transaction "
     command += "--all-databases"
 
     # Create safe command for logging (mask password)
     safe_command = command.replace(
-        mydb_config.accounts[dbengine]["admin_pass"], "********"
+        mydb_config.MARIADB_ROOT_PASSWORD, "********"
     )
 
     # Log backup start
@@ -410,8 +433,8 @@ def wait_for_mariadb(port, timeout=60):
     Returns:
         bool: True if MariaDB is ready, False if timeout
     """
-    admin_user = mydb_config.accounts[dbengine]["admin"]
-    admin_pass = mydb_config.accounts[dbengine]["admin_pass"]
+    admin_user = "root"
+    admin_pass = mydb_config.MARIADB_ROOT_PASSWORD
 
     print(f"DEBUG: Waiting for MariaDB on port {port} to be ready...")
     start_time = time.time()
@@ -460,8 +483,8 @@ def restore(dest, S3_file):
     # Note: MariaDB password must be passed via -p flag (no space between -p and password)
     maria_cmd = f"mariadb --host {mydb_config.container_host} "
     maria_cmd += f"-P {dest['Port']} "
-    maria_cmd += f"-u {mydb_config.accounts[dbengine]['admin']} "
-    maria_cmd += f"-p{mydb_config.accounts[dbengine]['admin_pass']}"
+    maria_cmd += f"-u root "
+    maria_cmd += f"-p{mydb_config.MARIADB_ROOT_PASSWORD}"
 
     # Use common S3 piped restore function
     # MariaDB doesn't need environment variables - password is in command

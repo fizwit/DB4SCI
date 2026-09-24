@@ -237,17 +237,14 @@ def list_active_containers():
     return containers
 
 
-def get_max_port():
-    """Return the next available port number (highest used port + 1)
+def get_avail_port():
+    """Return the next available port number
 
     Queries the admin database for all active containers and finds the
-    highest port in use, then returns the next available port number.
+    lowest available port not in use.
 
     Returns:
         int: Next available port number
-
-    Usage:
-        params["Port"] = admin_db.get_max_port()
     """
     ports = [mydb_config.base_port]
 
@@ -257,14 +254,10 @@ def get_max_port():
     for state in state_info:
         data = get_container_data(state.c_id)
         if data and "Info" in data and "Port" in data["Info"]:
-            try:
-                ports.append(int(data["Info"]["Port"]))
-            except (ValueError, TypeError):
-                # Skip if port is not a valid integer
-                print(f"Warning: Invalid port for container {state.name}")
-                continue
-
-    return max(ports) + 1
+            ports.append(int(data["Info"]["Port"]))
+    for i in range(mydb_config.base_port, mydb_config.max_port):
+        if i not in ports:
+            return i
 
 
 def display_container_state():

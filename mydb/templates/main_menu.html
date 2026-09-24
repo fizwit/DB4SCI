@@ -35,7 +35,7 @@
             <ul>
               <li><a href="{{ url_for('admin', cmd='help') }}">Admin Help</a></li>
               <li><a href="{{ url_for('admin', cmd='session_info') }}">Show Session Info</a></li>
-              <li><a href="{{ url_for('select_container', dbaction='restore') }}">Restore From S3 Backup</a></li>
+              <li><a href="{{ url_for('select_container', dbaction='restore_from') }}">Restore From S3 Backup</a></li>
               <li><a href="{{ url_for('select_container', dbaction='admin_metadata') }}">Service Meta Data</a></li>
               <li><a href="{{ url_for('select_container', dbaction='audit_db') }}">Audit DB</a></li>
               <li><a href="{{ url_for('select_container', dbaction='connection') }}">Connection CLI</a></li>
