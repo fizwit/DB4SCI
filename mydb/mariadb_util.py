@@ -110,7 +110,15 @@ def mariadb_audit(Info):
     report.append("USERS AND ACCOUNTS:")
     report.append("-" * 80)
     cur.execute("""
-        SELECT User, Host FROM mysql.global_priv
+        SELECT User, Host,
+                IF(access & 32768, 'True', 'False') as SuperUser,
+                IF(access & 16, 'True', 'False') as CreatePriv,
+                IF(access & 1024, 'True', 'False') as GrantPriv
+        FROM (
+            SELECT User, Host,
+                   CAST(JSON_VALUE(Priv, '$.access') AS UNSIGNED) as access
+            FROM mysql.global_priv
+        ) AS gp
         ORDER BY User, Host
     """)
     users = cur.fetchall()
