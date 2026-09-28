@@ -1,5 +1,6 @@
 import datetime
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -246,16 +247,18 @@ def s3_file_restore(s3_url, restore_command, env):
         return (False, error_msg)
 
 
-def s3_piped_restore(s3_url, restore_command, env=None):
+def s3_piped_restore(s3_url, restore_command, env=None, filter=None):
     """Execute S3 restore using piped subprocess commands with Popen
 
-    Uses subprocess.Popen to pipe: aws s3 cp <s3_url> - | <restore_command>
+    Uses subprocess.Popen to pipe: aws s3 cp <s3_url> - | [filter |] <restore_command>
 
     Args:
         s3_url (str): Full S3 URL to backup file
         restore_command (str or list): Database restore command that reads from stdin
                                        Can be a string or list of command arguments
         env (dict): Optional environment variables to add/override (merged with os.environ)
+        filter (str): Optional shell-quoted command piped between the S3 copy
+                      and the restore command (e.g. an awk script)
         timeout (int): Timeout in seconds (default 1200 = 20 minutes)
 
     Returns:
@@ -282,7 +285,10 @@ def s3_piped_restore(s3_url, restore_command, env=None):
 
     # Create safe command for logging
     aws_cmd_str = " ".join(aws_cmd)
-    full_command = f"{aws_cmd_str} |  \\\n {restore_command}"
+    if filter:
+        full_command = f"{aws_cmd_str} |  \\\n {filter} |  \\\n {restore_command}"
+    else:
+        full_command = f"{aws_cmd_str} |  \\\n {restore_command}"
     safe_message = hide_password(full_command)
 
     print(f"DEBUG backup_util.s3_piped_restore: {full_command}")
@@ -293,19 +299,28 @@ def s3_piped_restore(s3_url, restore_command, env=None):
     try:
         # Start AWS S3 copy process
         p1 = subprocess.Popen(aws_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        source = p1.stdout
 
-        # Start restore process, reading from S3 copy stdout
+        # Optional filter process between S3 copy and restore
+        if filter:
+            pf = subprocess.Popen(
+                shlex.split(filter), stdin=p1.stdout, stdout=subprocess.PIPE
+            )
+            p1.stdout.close()
+            source = pf.stdout
+
+        # Start restore process, reading from S3 copy (or filter) stdout
         p2 = subprocess.Popen(
             restore_cmd_list,
             env=process_env,
-            stdin=p1.stdout,
+            stdin=source,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         )
 
-        # Close p1 stdout to allow p1 to receive SIGPIPE if p2 exits
-        p1.stdout.close()
+        # Close upstream stdout to allow SIGPIPE if p2 exits
+        source.close()
 
         # Wait for completion with timeout
         stdout, stderr = p2.communicate(timeout=timeout)

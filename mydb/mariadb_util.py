@@ -483,7 +483,8 @@ def restore(dest, S3_file):
     maria_cmd += f"-p{mydb_config.MARIADB_ROOT_PASSWORD}"
 
     # restore filter
-    filter = "awk '/^-- Current Database: /{skip = ($4 ~ /^`(mysql|information_schema|performance_schema|sys)`$/)} !skip"     # Use common S3 piped restore function
+    filter = "awk '/^-- Current Database: /{skip = ($4 ~ /^`(mysql|information_schema|performance_schema|sys)`$/)} !skip'"
+    # Use common S3 piped restore function
     # MariaDB doesn't need environment variables - password is in command
     success, msg = backup_util.s3_piped_restore(S3_file, maria_cmd, filter=filter)
 

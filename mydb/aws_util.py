@@ -27,11 +27,22 @@ def list_s3(Name, prefix):
     """return list of backup prefixes for a container.
     Note each prefix is PIT backup date, the backup files are
     in the PIT
+
+    Returns the raw `aws s3 ls` stdout.  On an AWS failure (bad credentials,
+    wrong bucket/region, no such prefix) returns "" -- but logs the exit code
+    and stderr first, so an empty restore list is never silent.  os.popen()
+    used to swallow both, which made a blank list impossible to diagnose.
     """
-    cmd = f"aws s3 ls --recursive {mydb_config.AWS_BUCKET_NAME}/{prefix}/{Name}"
-    print(f"DEBUG: {__file__}.selecte list_s3 cmd: {cmd}")
-    backups = os.popen(cmd).read().strip()
-    return backups
+    cmd = ["aws", "s3", "ls", "--recursive",
+           f"{mydb_config.AWS_BUCKET_NAME}/{prefix}/{Name}"]
+    print(f"DEBUG: {__file__} list_s3 cmd: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"ERROR list_s3: aws s3 ls failed (exit {result.returncode}) "
+              f"for {mydb_config.AWS_BUCKET_NAME}/{prefix}/{Name}\n"
+              f"{result.stderr.strip()}")
+        return ""
+    return result.stdout.strip()
 
 
 def parse_s3_backup_list(Name, prefix):

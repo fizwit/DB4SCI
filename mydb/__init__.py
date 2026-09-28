@@ -3,6 +3,17 @@ import os
 import traceback
 from datetime import timedelta
 
+from dotenv import load_dotenv
+
+# Load .env before anything below reads os.environ.  This is what makes a local
+# `flask run` (or `python app.py`, or pytest) pick up the config -- otherwise
+# only docker-compose loads it (env_file/.env in db4sci.yml).  It must run
+# before `admin_db`/`migrate_db` are imported, since their init reads env at
+# import time.  In the container this is a harmless no-op: the environment is
+# already set by compose, no .env is shipped in the image, and load_dotenv does
+# not override variables that are already present.
+load_dotenv()
+
 from .errors import AppError
 
 # Create the app instance at module level so `from mydb import app` works.
