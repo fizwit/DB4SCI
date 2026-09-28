@@ -65,7 +65,7 @@ def create_init_script(params):
     """
 
     sql_init_script = f"""-- Grant privileges
-GRANT ALL PRIVILEGES ON *.* TO '{{dbuser}}'@'%' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON *.* TO '{params['dbuser']}'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 """
 

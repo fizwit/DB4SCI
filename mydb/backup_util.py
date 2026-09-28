@@ -23,13 +23,9 @@ print(rpt[1])
 
 def hide_password(cmd_list):
     """Hide password in command list"""
-    if "mongodump" in cmd_list or "mongorestore" in cmd_list:
-        safe_message = cmd_list.replace(
-            mydb_config.accounts["MongoDB"]["admin_pass"], "xxxxx"
-        )
     if "mariadb-dump" in cmd_list or "mariadb" in cmd_list:
         safe_message = cmd_list.replace(
-            mydb_config.accounts["MariaDB"]["admin_pass"], "xxxxx"
+            mydb_config.MARIADB_ROOT_PASSWORD, "xxxxx"
         )
     else:
         safe_message = cmd_list
