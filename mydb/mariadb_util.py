@@ -110,11 +110,7 @@ def mariadb_audit(Info):
     report.append("USERS AND ACCOUNTS:")
     report.append("-" * 80)
     cur.execute("""
-        SELECT User, Host,
-                IF(Super_priv='Y', 'True', 'False') as SuperUser,
-                IF(Create_priv='Y', 'True', 'False') as CreatePriv,
-                IF(Grant_priv='Y', 'True', 'False') as GrantPriv
-        FROM mysql.user
+        SELECT User, Host FROM mysql.global_priv
         ORDER BY User, Host
     """)
     users = cur.fetchall()
@@ -469,6 +465,12 @@ def restore(dest, S3_file):
 
     Returns:
         str: Result messages from restore operations
+
+    The mysql table changes after Maria 10.4. Dont restore the mysql table.
+    database, but check for mysql.proc 'INSERT INTO `proc`
+    and for user defined events in mysql.event in the  dump.sql file.
+    grep -c 'INSERT INTO `event`' dump.sql
+    All other mysql tables should be skipped.
     """
     result_msg = ""
 
@@ -480,9 +482,10 @@ def restore(dest, S3_file):
     maria_cmd += f"-u root "
     maria_cmd += f"-p{mydb_config.MARIADB_ROOT_PASSWORD}"
 
-    # Use common S3 piped restore function
+    # restore filter
+    filter = "awk '/^-- Current Database: /{skip = ($4 ~ /^`(mysql|information_schema|performance_schema|sys)`$/)} !skip"     # Use common S3 piped restore function
     # MariaDB doesn't need environment variables - password is in command
-    success, msg = backup_util.s3_piped_restore(S3_file, maria_cmd)
+    success, msg = backup_util.s3_piped_restore(S3_file, maria_cmd, filter=filter)
 
     if not success:
         result_msg += f"Error restoring {S3_file}:\n{msg}\n"

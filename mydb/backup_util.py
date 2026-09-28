@@ -32,7 +32,7 @@ def hide_password(cmd_list):
     return safe_message
 
 
-def s3_piped_backup(backup_command, s3_url, env=None):
+def s3_piped_backup(backup_command, s3_url, env=None, filter: str|None):
     """Execute database backup using piped subprocess commands to S3
 
     Uses subprocess.Popen to pipe: <backup_command> | aws s3 cp - <s3_url>
@@ -69,7 +69,10 @@ def s3_piped_backup(backup_command, s3_url, env=None):
 
     # Create command for logging
     aws_cmd_str = " ".join(aws_cmd)
-    full_command = f"{backup_cmd_list} | \\\n  {aws_cmd_str}"
+    full_command = f"{backup_cmd_list} | \\\n"
+    if filter:
+        full_command += f" | {filter}\n"
+    full_command += f"  {aws_cmd_str}"
     safe_message = hide_password(backup_command)
 
     print(f"DEBUG backup_util.s3_piped_backup: {full_command} env: {env}")

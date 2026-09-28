@@ -423,6 +423,8 @@ def admin(cmd):
         name = request.args['name']
     if 'cid' in request.args:
         cid = int(request.args['cid'])
+    else:
+        cid = None
     render_page = "dblist.html"
     header = f"Administrative Function: {cmd}"
     if cmd == "help":
@@ -491,7 +493,7 @@ def admin(cmd):
         title = "MyDB Admin Services"
         header, body = swarm_util.display_services()
     elif cmd == "delete_container_state":
-        title = f'Only remove the Metadata from admin_db cid = {args["cid"]}'
+        title = f'Only remove the Metadata from admin_db cid = {cid}'
         status = admin_db.delete_container_state(cid)
         if status:
             body = "Administratively removed meta data from admin_db"
