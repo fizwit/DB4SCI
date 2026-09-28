@@ -5,17 +5,18 @@ from smtplib import SMTPRecipientsRefused
 from . import mydb_config
 
 
-def send_mail(subject, message, TO):
+def send_mail(subject, message, to):
     """send email """
     SERVER = mydb_config.MAIL_SERVER
     FROM = mydb_config.MAIL_FROM
-    message = """\
-From: %s
-To: %s
-Subject: %s
+    TO = ", ".join(to)
+    message = f"""\
+From: {mydb_config.MAIL_FROM}
+To: {TO}
+Subject: {subject}
 
-%s
-""" % (FROM, ", ".join(TO), subject, message)
+{message}
+"""
 
     server = smtplib.SMTP(SERVER)
     try:
