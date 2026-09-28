@@ -465,6 +465,16 @@ def pg_backup(info, backup_type="User", c_id=None):
 
     if not success:
         message += f"Error backing up globals:\n{msg}"
+        admin_db.backup_log(
+            c_id,
+            Name,
+            "end",
+            backup_id,
+            backup_type,
+            url=s3_url,
+            command=pg_dumpall_cmd,
+            err_msg=backup_util.backup_err_msg(False, msg, context="globals"),
+        )
         return message
     message += msg
 
@@ -483,6 +493,16 @@ def pg_backup(info, backup_type="User", c_id=None):
         message += f"psycopg connect: container: {Name}, Port: {info['Port']}"
         message += f"message: {e}, "
         print(f"ERROR: {message}")
+        admin_db.backup_log(
+            c_id,
+            Name,
+            "end",
+            backup_id,
+            backup_type,
+            url=s3_url,
+            command=pg_dumpall_cmd,
+            err_msg=f"{backup_util.BACKUP_FAILED}: psycopg connect: {e}",
+        )
         return message
 
     cur = connection.cursor()
@@ -495,6 +515,7 @@ def pg_backup(info, backup_type="User", c_id=None):
     message += f"\nBacking up {len(dbs)} database(s):\n"
     # Back up each database
     pg_dump_cmd = ""
+    err_msg = ""
     for db in dbs:
         dbname = db[0]
         s3_dump_url = f"{s3_url}{Name}_{dbname}.dump"
@@ -514,6 +535,8 @@ def pg_backup(info, backup_type="User", c_id=None):
         if not success:
             message += f"\nDatabase: {dbname}\n"
             message += f"Error: {msg}\n"
+            if not err_msg:
+                err_msg = backup_util.backup_err_msg(False, msg, context=dbname)
         else:
             message += f"\nDatabase: {dbname} written to: {s3_dump_url}\n"
             message += msg
@@ -526,7 +549,7 @@ def pg_backup(info, backup_type="User", c_id=None):
         backup_type,
         url=s3_url,
         command=pg_dump_cmd,
-        err_msg=message,
+        err_msg=err_msg,
     )
 
     return message

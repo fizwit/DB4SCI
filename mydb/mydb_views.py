@@ -470,7 +470,7 @@ def admin(cmd):
         if name:
             (header, body) = backup_util.backup_audit(name)
         elif cid:
-            (header, body) = backup_util.backup_audit(cid)
+            (header, body) = backup_util.backup_audit(c_id=cid)
         else:
             (header, body) = backup_util.backup_audit()
     elif cmd == "log":
