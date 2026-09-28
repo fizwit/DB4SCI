@@ -396,7 +396,7 @@ def backup(c_id, info, backup_type):
 
     success, msg = backup_util.s3_piped_backup(command, s3_filename)
     if not success:
-        send_mail("MyDB: MariaDB backup error", message, mydb_config.supportEmail)
+        send_mail("MyDB: MariaDB backup error", message + msg, mydb_config.supportEmail)
 
     # Log backup end
     admin_db.backup_log(
@@ -406,8 +406,8 @@ def backup(c_id, info, backup_type):
         backup_id,
         backup_type,
         url=s3_url,
-        command=command,
-        err_msg="",
+        command=safe_command,
+        err_msg=backup_util.backup_err_msg(success, msg),
     )
 
     return message + msg

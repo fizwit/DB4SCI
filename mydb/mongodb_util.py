@@ -330,7 +330,14 @@ def backup(info, type):
 
     # Log backup end
     admin_db.backup_log(
-        info["cid"], Name, "end", backup_id, type, s3_url, safe_command, message
+        info["cid"],
+        Name,
+        "end",
+        backup_id,
+        type,
+        s3_url,
+        safe_command,
+        backup_util.backup_err_msg(success, msg),
     )
     return message
 
