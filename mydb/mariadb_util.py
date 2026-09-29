@@ -56,16 +56,29 @@ def auth_mariadb(dbuser, dbpass, port):
     return True
 
 
+def grant_pattern(name):
+    """Escape the GRANT wildcards '_' and '%' so <name> matches literally"""
+    return name.replace("\\", "\\\\").replace("_", "\\_").replace("%", "\\%")
+
+
 def create_init_script(params):
-    """This function is not needed or currently used. It might be handy in the future if
-    we need to create a custom init script for MariaDB, to set memory limits or other settings.
+    """Create the MariaDB init script as a Swarm config.
 
     MariaDB initialization scripts in /docker-entrypoint-initdb.d/ are executed
     automatically when the container starts for the first time (when data directory is empty).
-    """
 
-    sql_init_script = f"""-- Grant privileges
-GRANT ALL PRIVILEGES ON *.* TO '{params['dbuser']}'@'%' WITH GRANT OPTION;
+    The user gets database-level privileges only -- never global (*.*) privileges --
+    so they cannot write to the `mysql` system database, create accounts, or
+    grant privileges to others.  They get ALL on their own database <dbname>
+    and may create additional databases named <dbname>_<anything>.
+    """
+    dbuser = params["dbuser"]
+    dbname = grant_pattern(params["dbname"])
+
+    sql_init_script = f"""-- Database-level privileges only; no access to the mysql system database
+REVOKE ALL PRIVILEGES, GRANT OPTION FROM '{dbuser}'@'%';
+GRANT ALL PRIVILEGES ON `{dbname}`.* TO '{dbuser}'@'%';
+GRANT ALL PRIVILEGES ON `{dbname}\\_%`.* TO '{dbuser}'@'%';
 FLUSH PRIVILEGES;
 """
 
