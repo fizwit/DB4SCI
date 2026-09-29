@@ -57,6 +57,9 @@
             </ul>
          </li><!-- end 'Migrate' -->
          {% endif %} <!-- End if Admin is True -->
+         {% if is_mydb_admin %}
+         <li>{% if session['admin_user'] == true %}<a href="{{ url_for('admin_mode', mode='off') }}">User View</a>{% else %}<a href="{{ url_for('admin_mode', mode='on') }}">Admin View</a>{% endif %}</li>
+         {% endif %}
          <li><a href='#'>Documentation</a>
            <ul>
              <li><a href="{{ url_for('doc_page', doc='documentation') }}">Overview</a></li>

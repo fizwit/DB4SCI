@@ -264,7 +264,6 @@ def start_service(params, config_ref):
         if tasks:
             task = tasks[0]
             if task["Status"]["State"] == "running":
-                print(f"Service {params['Name']} is running")
                 c_id = admin_db.add_service(service.attrs, params)
                 return service, "Service Started"
             elif task["Status"]["State"] in ["failed", "shutdown", "rejected"]:
@@ -303,11 +302,9 @@ def stop_remove(service_name):
         service = client.services.get(service_name)
     except docker.errors.NotFound:
         msg = f"Error: Service not found: {service_name}"
-        print(msg)
         return msg
     except docker.errors.APIError as e:
         msg = f"Error: API error getting service {service_name}: {e}"
-        print(msg)
         return msg
 
     try:
@@ -316,7 +313,6 @@ def stop_remove(service_name):
         return msg
     except docker.errors.APIError as e:
         msg = f"Error: removing service {service_name}: {e}"
-        print(msg)
         return msg
 
 

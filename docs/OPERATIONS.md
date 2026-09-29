@@ -10,6 +10,7 @@ This document provides troubleshooting and operational procedures for the MyDB D
 - [External Connectivity Testing](#external-connectivity-testing)
 - [Direct Database Access](#direct-database-access)
 - [Storage and Volume Management](#storage-and-volume-management)
+- [Backups](#backups)
 - [Admin Database Queries](#admin-database-queries)
 
 ---
@@ -458,6 +459,35 @@ docker run --rm -v mydb_<container_name>:/data alpine \
   sh -c "echo test > /data/test.txt && cat /data/test.txt"
 
 # If successful, volume is writable
+```
+
+---
+
+## Backups
+
+Nightly backups run from cron inside the `mydb_db4sci` container at 01:05 as user `dbaas`
+(`etc/mydb_backup.crontab`). Output is appended to `/var/log/backup_all.log` and a summary
+email is sent to `backup_admin_mail`.
+
+### Run backup_all Manually
+
+Runs the same command cron runs. Every active container is backed up per its
+`backup_freq` policy (Weekly containers only on Saturday).
+
+```bash
+docker exec -u dbaas $(docker ps -q -f name=mydb_db4sci) \
+  sh -c 'cd /app && /usr/local/bin/python3 -m mydb.backup_util --backup-all'
+```
+
+### Check the Last Backup Run
+
+```bash
+# Output from the nightly cron job
+docker exec $(docker ps -q -f name=mydb_db4sci) tail -50 /var/log/backup_all.log
+
+# Backup audit report (all containers, or one by name)
+docker exec -u dbaas $(docker ps -q -f name=mydb_db4sci) \
+  sh -c 'cd /app && /usr/local/bin/python3 -m mydb.backup_util [container_name]'
 ```
 
 ---

@@ -17,7 +17,6 @@ import datetime
 import os
 import shlex
 import subprocess
-import sys
 import tempfile
 import time
 
@@ -437,31 +436,49 @@ def backup_all():
     msg = "Backup_all has completed database backups for all containers.\n"
     msg += f"Environment: {mydb_config.DB4SCI_ENV}\n"
     msg += f"Start: {start}\n"
-    print(msg)
     for c_id, con_name in admin_db.list_active_containers():
-        info = admin_db.get_container_data(c_id)["Info"]
-        policy = info.get("backup_freq")
-        print(f"backup_all: container: {con_name} backup_freq: {policy}")
-        if policy is None or policy == "None":
-            continue
-        if policy == "Weekly" and time.localtime().tm_wday != saturday:
-            continue
-        info["username"] = "cron"
-        dbengine = info.get("dbengine")
-        print(f"backup_all: dbengine: {dbengine}")
-        if dbengine == "Postgres":
-            msg += postgres_util.pg_backup(info, "Admin", c_id)
-        elif dbengine == "MariaDB":
-            msg += mariadb_util.backup(c_id, info, "Admin")
+        # One bad container must not stop the others or the summary email
+        try:
+            data = admin_db.get_container_data(c_id)
+            if not data:
+                msg += f"\nERROR: {con_name} (cid={c_id}): no container data\n"
+                continue
+            info = data["Info"]
+            policy = info.get("backup_freq")
+            if policy is None or policy == "None":
+                continue
+            if policy == "Weekly" and time.localtime().tm_wday != saturday:
+                continue
+            info["username"] = "cron"
+            dbengine = info.get("dbengine")
+            if dbengine == "Postgres":
+                msg += postgres_util.pg_backup(info, "Admin", c_id)
+            elif dbengine == "MariaDB":
+                msg += mariadb_util.backup(c_id, info, "Admin")
+        except Exception as e:
+            msg += f"\nERROR: {con_name} (cid={c_id}): backup raised {type(e).__name__}: {e}\n"
     msg += f"End: {time.strftime('%A, %B %d, %Y %H:%M:%S')}\n"
     send_mail("MyDB: backup_all db", msg, mydb_config.backup_admin_mail)
     return msg
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        (header, body) = backup_audit(name=sys.argv[1])
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="MyDB backups. Default: print the backup audit report."
+    )
+    parser.add_argument(
+        "--backup-all",
+        action="store_true",
+        help="back up every active container per its backup policy (run from cron)",
+    )
+    parser.add_argument("name", nargs="?", help="audit only this container")
+    args = parser.parse_args()
+
+    if args.backup_all:
+        print(backup_all())
     else:
-        (header, body) = backup_audit()
-    print(header)
-    print(body)
+        (header, body) = backup_audit(name=args.name)
+        print(header)
+        print(body)

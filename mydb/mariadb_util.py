@@ -312,11 +312,11 @@ def migrate(info):
     wait_for_mariadb(params["Port"])
     params["Start Mesg"] = f"Started! Service_id: {service.id}"
     params["service_id"] = service.id
-    meta_data = json.dumps(params, indent=4)
-    print(meta_data)
+    if mydb_config.FLASK_DEBUG:
+        print(f"==== DEBUG: mariadb_util.migrate: {dbname}\n{result}")
+        print_meta_data(params)
 
     result = restore_ui(params, S3_prefix)
-    print(f"==== DEBUG: mariadb_util.migrate: {dbname}\n{result}")
     return result
 
 
@@ -517,3 +517,14 @@ def restore(dest, S3_file):
     result_msg += "Database restore completed from S3."
     print(f"DEBUG: maria_retore: result: {result_msg}")
     return result_msg
+
+def print_metadata(params):
+    """ for debug purposes - output of params
+    remove root and user passwords
+    """
+    print("DEBUG - current params")
+    for key, value in my_dict.items():
+        if key == "MARIADB_ROOT_PASSWORD" or
+           key == "dbuserpass":
+            value = "xxxx"
+        print("    {key}: {value}")

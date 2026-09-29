@@ -6,37 +6,19 @@ import os
 
 from .errors import AppError
 
-
-def get_secret(secret_name, env_var_name=None):
-    """
-    Get secret from Docker Swarm secret file or fall back to environment variable.
-    Useful for local development (env vars) vs production (Docker secrets).
-    """
-    # Try Docker secret first
-    secret_path = f"/run/secrets/{secret_name}"
-    if os.path.exists(secret_path):
-        with open(secret_path, "r") as f:
-            return f.read().strip()
-
-    # Fall back to environment variable
-    if env_var_name:
-        return os.getenv(env_var_name)
-
-    return None
-
-
 # =============================================================================
 # Organization Information
 # =============================================================================
 # Customize messages, email, and contact information
 # Used throughout the web interface and email notifications
 
-organizationName = "Your Organization"
-supportOrgName = "IT Support"
-supportEmail = "support@yourorg.edu"
-supportPerson = "Your Name"
-supportAdmin_email = ["admin@yourorg.edu"]
-backup_admin_mail = ["backup-alerts@yourorg.edu"]
+institutionName = "Example Institute"
+supportOrgName = "Research Computing"
+supportOrgEmail = "support@example.org"
+supportPerson = "Jane Admin"
+# Support and Backup admin are lists
+supportEmail = ["dba@example.org"]
+backup_admin_mail = ["dba@example.org"]
 
 # =============================================================================
 # Branding - Logo and Favicon
@@ -48,22 +30,18 @@ organizationLogo = "images/db4sci-logo.svg"
 organizationFavicon = "favicon.ico"
 backup_purge_period = "30" # used in documentation.html
 
-# =============================================================================
-# Secret Management
-# =============================================================================
-# Secrets can be stored as Docker Swarm secrets or environment variables
-# Values are retrieved using get_secret() which checks Docker secrets first,
-# then falls back to environment variables
-
-AWS_BUCKET_NAME = get_secret("aws_bucket_name", "AWS_BUCKET_NAME")
-FLASK_SECRET = get_secret("flask_secret", "FLASK_SECRET")
-SQLALCHEMY_ADMIN_URI = get_secret("sqlalchemy_admin_uri", "SQLALCHEMY_ADMIN_URI")
-SQLALCHEMY_MIGRATE_URI = get_secret("sqlalchemy_migrate_uri", "SQLALCHEMY_MIGRATE_URI")
+AWS_BUCKET_NAME = os.environ.get("AWS_BUCKET_NAME")
+FLASK_SECRET = os.environ.get("FLASK_SECRET")
+FLASK_DEBUG = os.environ.get("FLASK_DEBUG", None)
+SQLALCHEMY_ADMIN_URI = os.environ.get("SQLALCHEMY_ADMIN_URI")
+SQLALCHEMY_MIGRATE_URI = os.environ.get("SQLALCHEMY_MIGRATE_URI")
+DB4SCI_ENV = os.environ.get("DB4SCI_ENV")
 
 # Postgres privileged account MyDB uses for backup/restore and for
 # creating user databases.  Passed in by db4sci.yml.
-PG_ADMIN = get_secret("pg_admin", "PG_ADMIN")
-PG_ADMIN_PASS = get_secret("pg_admin_pass", "PG_ADMIN_PASS")
+PG_ADMIN = os.environ.get("PG_ADMIN")
+PG_ADMIN_PASS = os.environ.get("PG_ADMIN_PASS")
+MARIADB_ROOT_PASSWORD = os.environ.get("MARIADB_ROOT_PASSWORD")
 
 # =============================================================================
 # Docker Swarm Storage
@@ -85,10 +63,10 @@ SWARM_DEVICE = os.environ.get("SWARM_DEVICE", "/var/tmp/mydb").strip()
 # Hostname and domain where MyDB and database containers run
 # Users will connect to databases at: container_host.container_domain:PORT
 
-container_host = "db4sci"
-container_domain = "yourorg.edu"
+container_host = os.environ.get("DB4SCI_HOST", "mydb-host")
+container_domain = os.environ.get("DB4SCI_DOMAIN", "example.org")
 s3_prefix_prod = "mydb"
-s3_prefix_dev = "mydb-dev"
+s3_prefix_dev = "dev"
 s3_prefix_migrate = "prod"
 FQDN_host = container_host + "." + container_domain
 
@@ -98,9 +76,9 @@ FQDN_host = container_host + "." + container_domain
 # Configure your Active Directory server for user authentication
 # The AD_auth.py module can be replaced with alternative authentication
 
-ADServer = "dc.yourorg.edu"
-ADDomain = "yourorg.edu"
-ADSearchBase = "dc=yourorg,dc=edu"
+ADServer = os.environ.get("ADServer", "dc.example.org")
+ADDomain = os.environ.get("ADDomain", "example.org")
+ADSearchBase = os.environ.get("ADSearchBase", "dc=example,dc=org")
 
 # =============================================================================
 # Application Settings
@@ -108,6 +86,7 @@ ADSearchBase = "dc=yourorg,dc=edu"
 
 # Base port for database allocation (automatically increments from here)
 base_port = 32010
+max_port  = 32999
 
 # Docker configuration
 docker = "/usr/bin/docker"
@@ -115,7 +94,7 @@ base_url = "unix://var/run/docker.sock"
 
 # List of administrator usernames (AD usernames)
 # Admins have access to /admin/* routes
-admins = ["admin1", "admin2", "admin3"]
+admins = ["admin_username"]
 
 # Timezone for container operations
 TZ = os.getenv("TZ", "America/Los_Angeles")
@@ -128,9 +107,6 @@ aws = "aws"
 # =============================================================================
 # Application root directory
 db4sci_path = "/opt/db4sci"
-
-# Backup volume (shared across all database containers)
-backupvol = "/mydb_admin/db_backups"
 
 # =============================================================================
 # Database Engine Configuration
@@ -159,7 +135,7 @@ dbs = {  # Database engine configuration
     },
     "MariaDB": {
         "default_port": 3306,
-        "command": "mysqld",
+        "command": "mariadb",
         "service_user": "root",
         "mapped_volume": "/var/lib/mysql",
         "V": [  # Versions
@@ -168,20 +144,20 @@ dbs = {  # Database engine configuration
                 "volume": "/var/lib/mysql"},
         ],
     },
-    "MongoDB": {
-        "default_port": 27017,
-        "pub_ports": [27017],
-        "backupdir": "/var/backup",
-        "mapped_volume": "/data/db",
-        "service_user": "mongodb",
-        "command": "mongod",
-        "dbengine": "MongoDB",
-        "V": [  # Versions
-            {"version": "8.2.2",
-                "image": "mongo:8.2.2",
-                "volume": "/data/db"},
-        ],
-    },
+    #"MongoDB": {
+    #    "default_port": 27017,
+    #    "pub_ports": [27017],
+    #    "backupdir": "/var/backup",
+    #    "mapped_volume": "/data/db",
+    #    "service_user": "mongodb",
+    #    "command": "mongod",
+    #    "dbengine": "MongoDB",
+    #    "V": [  # Versions
+    #        {"version": "8.2.2",
+    #            "image": "mongo:8.2.2",
+    #            "volume": "/data/db"},
+    #    ],
+    #},
     # Uncomment to enable Neo4j support
     # "Neo4j": {
     #    "pub_ports": [7473, 7687],  # 7473:HTTPS  7687:Bolt
@@ -253,6 +229,7 @@ mydb_v1_meta_data = [
     "owner",
     "contact",
     "app_name",
+    "backup_freq",
 ]
 
 # =============================================================================
@@ -263,55 +240,10 @@ backup_log = "/mydb/logs/backup.log"
 admindb_log = "/mydb/logs/admindb.log"
 
 # =============================================================================
-# Database Admin Accounts
-# =============================================================================
-# For every database type, MyDB creates a privileged admin account
-# used for backup operations. Set usernames and passwords here.
-#
-# SECURITY WARNING: These passwords should be strong and unique.
-# In production, use Docker secrets or environment variables instead
-# of hardcoding passwords in this file.
-
-accounts = {
-    "Postgres": {
-        # Moved to docker env vars, see PG_ADMIN/PG_ADMIN_PASS above.
-        "admin": PG_ADMIN,
-        "admin_pass": PG_ADMIN_PASS,
-    },
-    "MongoDB": {
-        "admin": "dbaas",
-        "admin_pass": "CHANGE_ME_MONGODB_ADMIN_PASSWORD"
-    },
-    "MariaDB": {
-        "admin": "root",
-        "admin_pass": "CHANGE_ME_MARIADB_ADMIN_PASSWORD"
-    },
-    "Neo4j": {
-        "admin": "neo4j",
-        "admin_pass": "CHANGE_ME_NEO4J_ADMIN_PASSWORD"
-    },
-    # MyDB admin database credentials
-    "admindb": {
-        "admin": "mydbadmin",
-        "admin_pass": "CHANGE_ME_ADMINDB_PASSWORD",
-        "v1_admin_pass": "CHANGE_ME_V1_PASSWORD",
-        "contact": "admin@yourorg.edu",
-        "owner": "Database Administrator",
-    },
-    # Test user credentials (used by test scripts)
-    "test_user": {
-        "admin": "tester",
-        "admin_pass": "CHANGE_ME_TEST_PASSWORD",
-        "contact": "test@yourorg.edu",
-        "owner": "Test User",
-    },
-}
-
-# =============================================================================
 # Email Configuration
 # =============================================================================
 # SMTP settings for sending email notifications
 
-MAIL_FROM = "mydb-noreply@yourorg.edu"
-MAIL_TO = os.getenv("MAIL_TO")
-MAIL_SERVER = "smtp.yourorg.edu"
+MAIL_FROM = "mydb-noreply@example.org"
+MAIL_TO = "dba@example.org"
+MAIL_SERVER = "smtp.example.org"

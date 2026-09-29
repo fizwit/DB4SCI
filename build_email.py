@@ -20,7 +20,7 @@ __maintainer__ = 'John Dey jfdey@fredhutch.org'
     "address" = {'user', 'DisplayName', 'containers': [containerName, DB Image, Uptime]
 
     read a JinJa2 formated text file for the message, and format an email for each user
-    content variables for JinJa template: [User, sent_date, supportOrganizatioin, containers]
+    content variables for JinJa template: [User, sent_date, supportEmail, supportOrganization, containers]
 """
 
 def generate_email(subject, template_content, addresses):
@@ -34,7 +34,7 @@ def generate_email(subject, template_content, addresses):
     context = {}
     context['sent_date'] = now.strftime("%B %d, %Y")
     context['supportEmail'] = mydb_config.supportEmail
-    context['supportOrganizatioin'] = mydb_config.supportOrganizatioin
+    context['supportOrganization'] = mydb_config.supportOrgName
 
     for user in addresses.keys():
         context['User'] = addresses[user]['user']
@@ -47,7 +47,7 @@ def generate_email(subject, template_content, addresses):
         # Render Jinja2
         rendered_output = template.render(context)
         if '@' not in email_address:
-            print(f'Invalid email: {email_address} User: {context['User']}')
+            print(f'Invalid email: {email_address} User: {context["User"]}')
 
         status = send_mail.send_mail(subject, rendered_output, [email_address])
         if status:

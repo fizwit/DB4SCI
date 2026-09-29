@@ -7,6 +7,7 @@ from pathlib import Path
 
 import psycopg
 from psycopg import sql
+from sqlalchemy.engine import make_url
 
 from . import (
     admin_db,
@@ -767,7 +768,6 @@ def pg_restore(source, dest, S3_prefix, admin_conn=None, reset_users=False):
     for backup_file in backup_files:
         if ".dump" in backup_file[-5:]:
             instance, dbname, _ = extract_dbname(backup_file)
-            print(f"Restoring {instance}{dbname} from {backup_file}")
             if admin_conn is not None:
                 result_msg += ensure_database(admin_conn, dbname)
             restore_command = pg_restore.replace("XXXX", dbname)
@@ -805,15 +805,18 @@ def restore_admin_db():
     files = aws_util.get_files_in_s3(dump_prefix)
     if len(files) == 0:
         return f"Error: no files found in S3 for prefix {dump_prefix}"
-    # Build pg_restore command
-    password_env = {"PGPASSWORD": mydb_config.accounts["admindb"]["v1_admin_pass"]}
+    # Build pg_restore command from the migrate DB connection (SQLALCHEMY_MIGRATE_URI)
+    if not mydb_config.SQLALCHEMY_MIGRATE_URI:
+        return "Error: SQLALCHEMY_MIGRATE_URI is not set"
+    url = make_url(mydb_config.SQLALCHEMY_MIGRATE_URI)
+    password_env = {"PGPASSWORD": url.password or ""}
     pg_restore = " ".join(
         [
             "pg_restore",
-            f"--host {mydb_config.container_host}",
-            "--port 32008",
-            "--dbname=mydb_admin",
-            f"--username={mydb_config.accounts['admindb']['admin']}",
+            f"--host {url.host}",
+            f"--port {url.port or 5432}",
+            f"--dbname={url.database}",
+            f"--username={url.username}",
         ]
     )
 

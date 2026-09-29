@@ -14,7 +14,6 @@ from flask import (
 from . import app
 
 # from . import mongodb_util
-from .errors import AppError
 from . import (
     AD_auth,
     admin_db,
@@ -115,14 +114,6 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
-def register_error_handlers(app):
-    @app.errorhandler(AppError)
-    def handle_app_error(err: AppError):
-        cause = err.__cause__  # the excption chained with "from e"
-        details = str(cause) if cause is not None else str(err)
-        return render_template("error.html", message=str(err), details=details)
-
-
 @app.route("/list_containers/")
 @auth_required
 def list_containers():
@@ -173,7 +164,6 @@ def create_form():
     else:
         message = "ERROR: create_form: url argument dbengine is incorrect. "
         message += "check index.html template"
-        print(message)
         return "<h2>" + message + "</h2>"
 
 
@@ -199,10 +189,13 @@ def created():
     return render_template("created.html", **params)
 
 
+# Container actions from select_container/selected.  Only user_actions are open
+# to every logged-in user; every other dbaction (admin_actions, migrate_actions,
+# and the restore steps s3_select/restore_to) requires a MyDB administrator
+# (mydb_config.admins, session["admin_user"]).
+user_actions = ["list_s3", "backup"]
 migrate_actions = ["migrate", "migrate_info", "migrate_list_s3", "migrate_backuplog"]
 admin_actions = [
-    "list_s3",
-    "backup",
     "admin_metadata",
     "audit_db",
     "audit_mysql",
@@ -220,7 +213,9 @@ def select_container():
     from selected_container direct to <selected> and perform <dbaction>
     """
     action = request.args["dbaction"]
-    if action in admin_actions:
+    if action not in user_actions and not session.get("admin_user"):
+        return render_template("404.html", title="404 Error")
+    if action in user_actions or action in admin_actions:
         container_names = admin_db.list_container_names()
     elif action in migrate_actions:
         container_names = migrate_db.list_container_names()
@@ -258,6 +253,8 @@ def select_container():
 def selected():
     action = request.args["dbaction"]
     container_name = request.args["container_name"]
+    if action not in user_actions and not session.get("admin_user"):
+        return render_template("404.html", title="404 Error")
     if action == "backup":
         result = mydb_actions.user_backup(container_name)
         return render_template(
@@ -401,11 +398,12 @@ MyDB administrators must be added to mydb_config.admins.
 /admin/inspect?name=[container name]  Docker service inspect
 /admin/volume_list/  List Docker Volumes
 /admin/migrate_s3_prefix?name=ServiceName - List last backups from Mirgrate prefix
+/admin/backup_all  Run backups for all containers now (same as the nightly cron job)
 /admin/backup_audit[?name=xx | cid=x]  Display backup audit report for container
 /admin/log/  Display all records from ActionLog table
 /admin/container_data?cid=n  data field from containers table
 /admin/update?cid=n&key=value&...  Update Info with new key: values
-/admin/mode?mode=[on|off]
+/admin_mode/?mode=[on|off]  Switch between admin and user views
 /admin/delete_container_state?cid=n  Only remove from State table
 /admin/services - Display all Swam Services
 /admin/delete_container_state?cid=N
@@ -507,37 +505,24 @@ def admin(cmd):
 @app.route("/admin_mode/")
 @auth_required
 def admin_mode():
-    if "mode" in request.args:
-        title = "MyDB Admin Mode"
-        if request.args["mode"] is None:
-            body = "/admin/admin_mode must speicify the mode to be set.\n"
-            body += "/admin/admin_mode?mode=[on|off]\n"
-            return render_template("dblist.html", title=title, dbheader="", dbs=body)
-        elif request.args["mode"] not in ["on", "off"]:
-            body = "/admin/admin_mode must speicify the mode to be set.\n"
-            body += "/admin/admin_mode?mode=[on|off]\n"
-            return render_template("dblist.html", title=title, dbheader="", dbs=body)
-        elif request.args["mode"] == "on" and session["username"] in mydb_config.admins:
-            session["admin_user"] = True
-        elif request.args["mode"] == "off":
-            session["admin_user"] = False
-        body = f"Admin Mode = {session['admin_user']}"
-        dbheader = f"Set MyDB Admin Mode"
-        return render_template("dblist.html", title=title, dbheader=dbheader, dbs=body)
-    return render_template("admin_mode.html")
-
-
-@app.route("/cron/<cmd>", methods=["GET"])
-def cron(cmd):
-    header = request.headers.get("DB4SCI-Task-Token")
-    print(f"cron: cmd: {cmd} Header: {header}")
-    if header != mydb_config.DB4SCI_TASK_TOKEN:
-        return "<h2> invalid task token</h2>"
-    if cmd == "backup_all":
-        body = backup_util.backup_all()
-        return body, 204  # No Content
+    """Switch between admin and user views, for testing as an end user.
+    /admin_mode/?mode=[on|off]; without mode, show the current mode.
+    Only users in mydb_config.admins can turn admin mode on.
+    """
+    title = "MyDB Admin Mode"
+    dbheader = "Set MyDB Admin Mode"
+    usage = "Usage: /admin_mode/?mode=[on|off]\n"
+    mode = request.args.get("mode")
+    if mode is None:
+        body = f"Admin Mode = {session.get('admin_user', False)}\n\n{usage}"
+    elif mode not in ("on", "off"):
+        body = f"Invalid mode: {mode!r}\n\n{usage}"
+    elif mode == "on" and session.get("username") not in mydb_config.admins:
+        body = f"{session.get('username')} is not a MyDB administrator (mydb_config.admins).\n"
     else:
-        return '<h2> invalid command</h2>', 400  # Bad Request
+        session["admin_user"] = mode == "on"
+        body = f"Admin Mode = {session['admin_user']}\n"
+    return render_template("dblist.html", title=title, dbheader=dbheader, dbs=body)
 
 
 @app.route("/doc_page/")

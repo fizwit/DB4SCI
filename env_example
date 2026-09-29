@@ -14,9 +14,9 @@ FLASK_DEBUG=0
 # Generate a strong random key: python -c 'import secrets; print(secrets.token_urlsafe(32))'
 FLASK_SECRET='CHANGE_ME_TO_A_RANDOM_SECRET_KEY'
 
-# TASK_TOKEN is used to authenticate cron jobs, passed via http headers
-# Future AWS update creds
-DB4SCI_TASK_TOKEN=backup-N-admin_Stuff26
+# operational Environment production or development ['prod' | 'dev']
+# DB4SCI_ENV=prod
+DB4SCI_ENV=dev
 
 # =============================================================================
 # PostgreSQL Admin Database Credentials
@@ -27,14 +27,10 @@ MYDB_ADMIN_USER='mydbadmin'
 # MyDB migrate database password (for migration/staging database)
 MYDB_MIGRATE_PASSWORD='CHANGE_ME_MIGRATE_PASSWORD'
 
-# MyDB admin database password (for production admin database)
-MYDB_ADMIN_PASSWORD='CHANGE_ME_ADMIN_PASSWORD'
-
 # Postgres admin account - Copy from mydb_config.py Postgres`admin` and `admin_pass`
 PG_ADMIN=pgdba
-PG_ADMIN_PASS="fhpsqladmin"
-maria_admin="root"
-maria_admin_pass="fhmariaadmin"
+PG_ADMIN_PASS='CHANGE_ME_PG_ADMIN_PASSWORD'
+MARIADB_ROOT_PASSWORD='CHANGE_ME_MARIADB_ROOT_PASSWORD'
 
 # =============================================================================
 # SQLAlchemy Database Connection Strings
@@ -101,19 +97,14 @@ ADSearchBase="dc=example,dc=org"
 # Format: s3://bucket-name
 AWS_BUCKET_NAME="s3://your-org-mydb-backups"
 
-# AWS_BAKCUP_PREFIX -> string
-# prefix For AWS backups - Do not mix production and development backups!
-# ['prod', 'dev', 'etc']
-AWS_BACKUP_PREFIX='dev'
-
 # AWS IAM credentials with S3 access
 # Required permissions: s3:PutObject, s3:GetObject, s3:ListBucket
-AWS_ACCESS_KEY_ID=AWKBARFFOOBAREXAMPLE
+AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 
 # AWS secret access key (keep this secure!)
 AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 
-AWS_DEFAULT_REGION=eu-central-2
+AWS_DEFAULT_REGION=us-west-2
 
 # =============================================================================
 # Email Configuration (Optional)
@@ -133,7 +124,7 @@ AWS_DEFAULT_REGION=eu-central-2
 # Docker Private Repo name
 # =============================================================================
 #
-org_repo_name=registry.institute.edu
+org_repo_name=registry.example.org
 
 # =============================================================================
 # Additional Notes
