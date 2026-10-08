@@ -477,7 +477,6 @@ def pg_backup(info, backup_type="User", c_id=None):
             err_msg=backup_util.backup_err_msg(False, msg, context="globals"),
         )
         return message
-    message += msg
 
     # Get list of user databases to be backed up.  psycopg works across server
     # versions, so this query still runs from DB4SCI over the network.
@@ -540,7 +539,6 @@ def pg_backup(info, backup_type="User", c_id=None):
                 err_msg = backup_util.backup_err_msg(False, msg, context=dbname)
         else:
             message += f"\nDatabase: {dbname} written to: {s3_dump_url}\n"
-            message += msg
 
     admin_db.backup_log(
         c_id,
