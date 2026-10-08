@@ -1,4 +1,4 @@
-from flask import Flask, g, render_template
+from flask import Flask, g, render_template, session
 import os
 import traceback
 from datetime import timedelta
@@ -19,7 +19,14 @@ from .errors import AppError
 # Create the app instance at module level so `from mydb import app` works.
 # mydb_views.py registers its routes with @app.route(...) against this object.
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET", "default_secret_key")
+# The session cookie (including session["admin_user"]) is signed with this key;
+# a known or default key lets anyone forge an admin session, so refuse to start.
+app.secret_key = os.environ.get("FLASK_SECRET")
+if not app.secret_key or app.secret_key == "CHANGE_ME_TO_A_RANDOM_SECRET_KEY":
+    raise RuntimeError(
+        "FLASK_SECRET is not set. Generate one with: "
+        "python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+    )
 # Session expires after N minutes of inactivity
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=120)
 
@@ -61,6 +68,8 @@ def inject_branding():
         "supportOrgEmail": mydb_config.supportOrgEmail,
         "supportOrgName": mydb_config.supportOrgName,
         "backup_purge_period": mydb_config.backup_purge_period,
+        # True for users in mydb_config.admins, whether or not admin mode is on
+        "is_mydb_admin": session.get("username") in mydb_config.admins,
     }
 
 

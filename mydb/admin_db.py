@@ -16,7 +16,6 @@ from .human import human_uptime
 
 # Create production engine
 PROD_URI = mydb_config.SQLALCHEMY_ADMIN_URI
-print(f"Production engine URI: {PROD_URI}")
 
 # Production engine with connection pool settings
 # pool_pre_ping: Test connections before using them to avoid stale connections
@@ -26,7 +25,6 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=3600,
 )
-print(f"Production engine: {PROD_URI}")
 
 # Create session factory
 SessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -79,10 +77,11 @@ def init_db():
                 add_service(service_attrs, params)
     except OperationalError as err:
         print(
-            f"WARNING: could not connect to the admin database at {PROD_URI!r}: "
+            f"WARNING: could not connect to the admin database\n"
             f"{err.orig if err.orig is not None else err}\n"
             "Starting without an initialized admin database. Verify the "
-            "'mydb_admin_db' service is running and reachable, then restart."
+            "'mydb_admin_db' service is running and reachable, then restart.\n"
+            "Also verify the environment variable `PROD_URI` is correct"  
         )
         sys.exit(1)
 
@@ -497,7 +496,6 @@ def display_active_containers():
     counter = 0
     for c_id in cid_list:
         data = get_container_data(c_id)
-        print(f"data: {data}")
         info = data["Info"]
         started = data["CreatedAt"]
         human = human_uptime(started)

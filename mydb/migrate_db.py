@@ -31,7 +31,6 @@ if MIGRATE_URI:
         pool_pre_ping=True,
         pool_recycle=3600,
     )
-    print(f"Migrate engine: {MIGRATE_URI}")
 
     # Create session factory
     MigrateSessionFactory = sessionmaker(
@@ -55,13 +54,13 @@ def init_db():
 
     try:
         Base.metadata.create_all(bind=migrate_engine)
-        print("Initialized migrate database")
     except OperationalError as err:
         print(
-            f"WARNING: could not connect to the migrate database at {MIGRATE_URI!r}: "
+            "WARNING: could not connect to the migrate database at $MIGRATE_URI: "
             f"{err.orig if err.orig is not None else err}\n"
             "Starting without an initialized migrate database. Verify the "
             "migrate database service is running and reachable, then restart."
+            "Is the environment variable: MIGRATE_URI set correctly?"
         )
 
 

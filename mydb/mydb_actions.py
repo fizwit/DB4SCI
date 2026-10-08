@@ -46,7 +46,8 @@ def admin_actions(action, args):
         if dbengine == "Postgres":
             result = postgres_util.pg_backup(info, "Admin")
         elif dbengine == "MariaDB":
-            result = mariadb_util.mariadb_backup(info)
+            c_id = admin_db.get_container_state(container_name).c_id
+            result = mariadb_util.backup(c_id, info, "Admin")
         else:
             result = f"Backup not implemented for {dbengine}."
         header = f"{dbengine} Backup"
@@ -68,14 +69,15 @@ def admin_actions(action, args):
 
 def connection_cmd(dbengine, info):
     """create  CLI connection command"""
-    admin_user = mydb_config.accounts[dbengine]["admin"]
-    admin_pass = mydb_config.accounts[dbengine]["admin_pass"]
     if dbengine == "Postgres":
+        admin_user = mydb_config.PG_ADMIN
+        admin_pass = mydb_config.PG_ADMIN_PASS
         cmd = f"PGPASSWORD={admin_pass} psql -h {mydb_config.container_host} "
         cmd += f"-p {info['Port']}  -d {info['dbname']} -U {admin_user}"
         print(f"DEBUG connection_cmd: {cmd}")
         return cmd
     elif dbengine == "MariaDB":
+        admin_pass = mydb_config.MARIADB_ROOT_PASSWORD
         cmd = f"MYSQL_PWD={admin_pass} mariadb --host {mydb_config.container_host} "
         cmd += f"-P {info['Port']} -u root"
         print(f"DEBUG connection_cmd: {cmd}")
@@ -264,7 +266,6 @@ def auth_delete(Name, dbuser, dbuserpass, username):
     else:
         return "Error: Container type not found"
     if auth:
-        print("auth is true; deleting: %s" % Name)
         result = swarm_util.admin_delete(Name, username)
     else:
         result = "Error: Authentication failed. You must be the owner to remove."

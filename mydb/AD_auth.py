@@ -79,7 +79,7 @@ def is_valid(username: str, password: str):
         print(f"LDAP search error: {e}", file=sys.stderr)
         return "Error", info
     if not sync or ldap_conn.result["result"] != 0:
-        print(f"LDAP Search result: {ldap_conn.result}")
+        print(f"LDAP Search error result: {ldap_conn.result}")
         return ("Error", info)
 
     """ print response from ldap3 search """

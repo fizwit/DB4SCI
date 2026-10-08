@@ -12,7 +12,7 @@ test/*
 requirements.docker-ce
 env_setup.sh
 mydb/mydb_config.py
-/mydb_config.py
+mydb_config.py
 Extras
 __pycache__/
 

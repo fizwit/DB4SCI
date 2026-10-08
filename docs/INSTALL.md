@@ -67,7 +67,6 @@ Create an `.env` file in the top-level directory with the following content:
 
 ```bash
 FLASK_SECRET=
-TASK_TOKEN="secret strig used header requests to protect admin UI"
 SQLALCHEMY_ADMIN_URI=
 SQLALCHEMY_MIGRATE_URI=""
 AWS_ACCESS_KEY_ID=
