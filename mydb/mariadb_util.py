@@ -240,6 +240,7 @@ def build_params_mariadb(info) -> dict:
     params["service_user"] = config_data["service_user"]
     params["dbname"] = info["Name"]
     params["Name"] = info["Name"]
+    params["backup_freq"] = info.get("BACKUP_FREQ", "")
 
     if "DB_USER" in info:
         params["dbuser"] = info["DB_USER"]
@@ -310,12 +311,7 @@ def migrate(info):
         return f"{error} {mydb_config.supportOrgName} has been notified"
 
     wait_for_mariadb(params["Port"])
-    params["Start Mesg"] = f"Started! Service_id: {service.id}"
     params["service_id"] = service.id
-    if mydb_config.FLASK_DEBUG:
-        print(f"==== DEBUG: mariadb_util.migrate: {dbname}\n{result}")
-        print_meta_data(params)
-
     result = restore_ui(params, S3_prefix)
     return result
 
@@ -517,14 +513,3 @@ def restore(dest, S3_file):
     result_msg += "Database restore completed from S3."
     print(f"DEBUG: maria_retore: result: {result_msg}")
     return result_msg
-
-def print_metadata(params):
-    """ for debug purposes - output of params
-    remove root and user passwords
-    """
-    print("DEBUG - current params")
-    for key, value in my_dict.items():
-        if key == "MARIADB_ROOT_PASSWORD" or
-           key == "dbuserpass":
-            value = "xxxx"
-        print("    {key}: {value}")
