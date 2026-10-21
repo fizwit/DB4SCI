@@ -174,7 +174,7 @@ def created():
     for item in request.form:
         params[item] = request.form[item].replace(";", "").replace("&", "").strip()
     params["username"] = session["username"]
-    if mydb_config.FLASK_DEBUG == '1':
+    if mydb_config.FLASK_DEBUG:
         print(f"DEBUG: mydb_views.created dbengine: {params['dbengine']}")
     if params["dbengine"] == "Postgres":
         result = postgres_util.create(params)
@@ -222,9 +222,7 @@ def select_container():
     else:
         return render_template("404.html", title="404 Error")
     container_names.sort()
-    if action == "list_s3":
-        header = "View S3 Backups"
-    elif action == "backup":
+    if action == "backup":
         header = "Backup Container Database"
     elif action == "restore_from":
         header = "Select Container to Restore from S3 Backup"
@@ -248,6 +246,28 @@ def select_container():
     )
 
 
+@app.route("/select_aws/", methods=["GET"])
+@auth_required
+def select_aws():
+    """ Select S3 prefix and container name for list of backups """
+    action = request.args["dbaction"]
+    if action == "list_s3":
+        container_names = admin_db.list_container_names()
+        container_names.sort()
+        header = "View S3 Backups"
+        s3_prefixes = [mydb_config.s3_prefix_prod,
+            mydb_config.s3_prefix_dev,
+            mydb_config.s3_prefix_migrate]
+        return render_template("select_aws.html",
+            dbaction=action,
+            title="Select Container Name",
+            header=header,
+            placeholder="Container Name",
+            prefixes=s3_prefixes,
+            items=container_names,
+        )
+
+
 @app.route("/selected/", methods=["GET"])
 @auth_required
 def selected():
@@ -264,7 +284,8 @@ def selected():
             header=f"Backup Results for {container_name}",
         )
     elif action == "list_s3":
-        backups = aws_util.list_s3(container_name, mydb_config.s3_prefix_prod)
+        s3_prefix = request.args["s3_prefix"]
+        backups = aws_util.list_s3(container_name, s3_prefix)
         return render_template(
             "action_result.html",
             result=backups,

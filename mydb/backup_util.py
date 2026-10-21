@@ -161,10 +161,10 @@ def s3_piped_backup(
 
     stages = [backup_command] + ([filter] if filter else []) + [" ".join(aws_cmd)]
     safe_message = hide_password(" | \\\n  ".join(stages), mask_password)
-    print(f"DEBUG backup_util.s3_piped_backup: {safe_message}")
+    if mydb_config.FLASK_DEBUG:
+        print(f"DEBUG backup_util.s3_piped_backup: {safe_message}")
 
-    result_msg = f"Backing up to S3: {s3_url}\n"
-    result_msg += f"Command: {safe_message}\n\n"
+    result_msg = f"  - Command: {safe_message}\n\n"
 
     try:
         results, stdout = _run_pipeline(commands, env=_merge_env(env), timeout=timeout)
@@ -186,7 +186,6 @@ def s3_piped_backup(
             result_msg += f"stdout: {stdout}\n"
         return (False, result_msg)
 
-    result_msg += "Backup completed successfully\n"
     if stdout:
         result_msg += f"stdout: {stdout}\n"
     return (True, result_msg)
@@ -216,7 +215,8 @@ def s3_file_restore(s3_url, restore_command, env=None, timeout=RESTORE_TIMEOUT):
 
     restore_cmd_list = restore_command.split() + [local_file]
     safe_message = hide_password(" ".join(restore_cmd_list))
-    print(f"DEBUG backup_util.s3_file_restore: {safe_message}")
+    if mydb_config.FLASK_DEBUG:
+        print(f"DEBUG backup_util.s3_file_restore: {safe_message}")
 
     result_msg = f"Restoring from local file: {local_file}\n"
     result_msg += f"Command: {safe_message}\n\n"
@@ -293,7 +293,8 @@ def s3_piped_restore(
 
     stages = [" ".join(aws_cmd)] + ([filter] if filter else []) + [restore_command]
     safe_message = hide_password(" | \\\n  ".join(stages), mask_password)
-    print(f"DEBUG backup_util.s3_piped_restore: {safe_message}")
+    if mydb_config.FLASK_DEBUG:
+        print(f"DEBUG backup_util.s3_piped_restore: {safe_message}")
 
     result_msg = f"Restoring from S3: {s3_url}\n"
     result_msg += f"Command: {safe_message}\n\n"
@@ -433,9 +434,8 @@ def backup_all():
     """
     saturday = 5
     start = time.strftime("%A, %B %d, %Y %H:%M:%S")
-    msg = "Backup_all has completed database backups for all containers.\n"
+    msg = f"DB4Sci Backup Start: {start}\n"
     msg += f"Environment: {mydb_config.DB4SCI_ENV}\n"
-    msg += f"Start: {start}\n"
 
     for c_id, con_name in admin_db.list_active_containers():
         # One bad container must not stop the others or the summary email
@@ -452,6 +452,7 @@ def backup_all():
                 continue
             info["username"] = "cron"
             dbengine = info.get("dbengine")
+            msg += f"  - {info['Name']} {dbengine}\n"
             if dbengine == "Postgres":
                 msg += postgres_util.pg_backup(info, "Admin", c_id)
             elif dbengine == "MariaDB":
@@ -459,7 +460,8 @@ def backup_all():
         except Exception as e:
             msg += f"\nERROR: {con_name} (cid={c_id}): backup raised {type(e).__name__}: {e}\n"
     msg += f"End: {time.strftime('%A, %B %d, %Y %H:%M:%S')}\n"
-    send_mail("MyDB: backup_all db", msg, mydb_config.backup_admin_mail)
+    msg += "Backup_all has completed database backups for all services .\n"
+    send_mail("DB4Sci: backup_all db", msg, mydb_config.backup_admin_mail)
     return msg
 
 

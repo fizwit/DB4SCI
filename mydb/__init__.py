@@ -44,6 +44,9 @@ def close_db(error):
     db = g.pop("db", None)
     if db is not None:
         db.close()
+    admin_db.db_session.remove()
+    if migrate_db.db_session is not None:
+        migrate_db.db_session.remove()
 
 
 # Catch AppError anywhere in a view and show error.html with its message,

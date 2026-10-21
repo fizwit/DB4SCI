@@ -1,5 +1,11 @@
 # Release Notes
 
+#### Version 2.0.4.4 Oct 2026
+ - improve rebustness of backup_util, continue loop of backups even if one fails
+ - AFter long idle times, DB4Sci emits a SQLAlchemy exception; An used open connection is removed and new
+   connection is created to the admin_db. Remove open SQLAlchemy connections from worker thread on error.
+   __init__.py:@app.teardown_appcontext   
+ 
 #### Version 2.0.4.3 Jul 1, 2026
 
  - Only use one admin account per database type. ie, all PostgreSQL use the PG_ADMIN_PASS,

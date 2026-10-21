@@ -1,0 +1,33 @@
+{% extends "main_menu.html" %}
+{% block title %} Select AWS {% endblock %}
+{% block head %} {{ super() }}{% endblock %}
+{% block content %}
+<div id="container">
+  <div class="title">
+    <h4>{{ title }}</h4>
+  </div>
+  <div id="content">
+    <form method="GET", action="{{ url_for('selected') }}">
+      <br>
+      <label for="prefix">{{ header }}</label>
+      <input type="text" id="prefix" list="prefix_list" name="s3_prefix">
+      <datalist id="prefix_list">
+        {% for o in prefixes %}
+        <option value="{{ o }}">
+        {% endfor %}
+      </datalist>
+      <br>
+      <label for="container">"Select an Container"</label>
+      <select id="container"  name="container_name">
+        {% for o in items %}
+        <option value="{{ o }}">{{ o }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden", name="dbaction", value="{{ dbaction }}">
+      <br>
+      <p><button type="submit">Submit</button></p>
+    </form>
+  </div id="content">
+</div>
+
+{% endblock %}

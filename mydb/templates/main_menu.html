@@ -18,7 +18,7 @@
               <li><a href="{{ url_for('list_containers') }}">List Docker Services</a></li>
               <li><a href="{{ url_for('select_with_auth', dbaction='restart') }}">Restart DB Service</a></li>
               <li><a href="{{ url_for('select_with_auth', dbaction='delete') }}">Delete Service</a></li>
-              <li><a href="{{ url_for('select_container', dbaction='list_s3') }}">List S3 Backups</a></li>
+              <li><a href="{{ url_for('select_aws', dbaction='list_s3') }}">List S3 Backups</a></li>
               <li><a href="{{ url_for('select_container', dbaction='backup') }}">Backup Database</a></li>
             </ul>
          </li> <!-- end Manage -->

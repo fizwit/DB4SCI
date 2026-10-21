@@ -62,9 +62,8 @@ COPY pyproject.toml /app/
 ADD mydb /app/mydb/
 
 # Setup cron for backups
-COPY etc/mydb_backup.crontab /etc/cron.d/backup-cron
+COPY etc/db4sci_backup.crontab /etc/cron.d/backup-cron
 RUN chmod 0644 /etc/cron.d/backup-cron && \
-    crontab -u dbaas /etc/cron.d/backup-cron && \
     touch /var/log/backup_all.log && \
     chown dbaas:dbaas /var/log/backup_all.log
 

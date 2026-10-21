@@ -8,8 +8,8 @@
   </div> 
   <div class="sub_title"> <h4> You must be the owner of the database to {{dbaction}} it. </h4></div>
   <div id="content">
-    <br>
     <form method="post" action="{{ url_for('selected_auth') }}">
+      <br>
       <label for="container">Select Container</label>
       <input type="text" name="Name" list="container_list" placeholder="Container Name" /><br />
          <datalist id="container_list">

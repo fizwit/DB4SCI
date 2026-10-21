@@ -351,8 +351,7 @@ docker exec -it $(docker ps -q -f name=mydb_<container_name>) \
   psql -U postgres -d <database_name>
 
 # For MariaDB databases
-docker exec -it $(docker ps -q -f name=mydb_<container_name>) \
-  mariadb -u root -p
+docker exec -it $(docker ps -q -f name=mydb_<container_name>) mariadb -u root -p
 
 # For MongoDB databases
 docker exec -it $(docker ps -q -f name=mydb_<container_name>) \
@@ -385,16 +384,13 @@ docker exec -it $(docker ps -q -f name=mydb_<container_name>) /bin/sh
 
 ```bash
 # Check PostgreSQL version in a user database
-docker exec $(docker ps -q -f name=mydb_<container_name>) \
-  psql -U postgres -c "SELECT version();"
+docker exec $(docker ps -q -f name=mydb_<container_name>)  psql -U postgres -c "SELECT version();"
 
 # List databases in a PostgreSQL instance
-docker exec $(docker ps -q -f name=mydb_<container_name>) \
-  psql -U postgres -c "\l"
+docker exec $(docker ps -q -f name=mydb_<container_name>) psql -U postgres -c "\l"
 
 # Check MariaDB version
-docker exec $(docker ps -q -f name=mydb_<container_name>) \
-  mariadb -u root -p<password> -e "SELECT VERSION();"
+docker exec $(docker ps -q -f name=mydb_<container_name>) mariadb -u root -p<password> -e "SELECT VERSION();"
 ```
 
 ---
@@ -615,8 +611,7 @@ docker service logs mydb_<container_name> --tail 50
 docker exec $(docker ps -q -f name=mydb_db4sci) ps aux | grep python
 
 # Test from inside container
-docker exec $(docker ps -q -f name=mydb_db4sci) \
-  curl http://localhost:5000/
+docker exec $(docker ps -q -f name=mydb_db4sci) curl http://localhost:5000/
 
 # Check for port binding issues
 docker exec $(docker ps -q -f name=mydb_db4sci) netstat -tlnp

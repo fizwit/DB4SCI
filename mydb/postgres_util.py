@@ -441,6 +441,7 @@ def pg_backup(info, backup_type="User", c_id=None):
 
     # Set PGPASSWORD environment variable for pg_dumpall
     env = {"PGPASSWORD": mydb_config.PG_ADMIN_PASS}
+    message = ""
 
     # Log backup start
     admin_db.backup_log(
@@ -454,9 +455,6 @@ def pg_backup(info, backup_type="User", c_id=None):
         err_msg="",
     )
 
-    message = f"\nExecuting Postgres backup to S3: {s3_url}\n"
-    message += f"Backing up globals to: {globals_s3_url}\n"
-
     # Use common S3 piped backup function with environment variables
     success, msg = backup_util.s3_piped_backup(
         pg_dumpall_cmd,
@@ -465,7 +463,7 @@ def pg_backup(info, backup_type="User", c_id=None):
     )
 
     if not success:
-        message += f"Error backing up globals:\n{msg}"
+        error_message = f"Error {Name} backing up globals:\n{msg}"
         admin_db.backup_log(
             c_id,
             Name,
@@ -476,7 +474,7 @@ def pg_backup(info, backup_type="User", c_id=None):
             command=pg_dumpall_cmd,
             err_msg=backup_util.backup_err_msg(False, msg, context="globals"),
         )
-        return message
+        return error_message
 
     # Get list of user databases to be backed up.  psycopg works across server
     # versions, so this query still runs from DB4SCI over the network.
@@ -489,10 +487,9 @@ def pg_backup(info, backup_type="User", c_id=None):
             dbname="postgres",
         )
     except Exception as e:
-        message = "Error: MyDB Postgres Backup; "
-        message += f"psycopg connect: container: {Name}, Port: {info['Port']}"
-        message += f"message: {e}, "
-        print(f"ERROR: {message}")
+        error_message = "Error: MyDB Postgres Backup; "
+        error_message += f"psycopg connect: container: {Name}, Port: {info['Port']}"
+        error_message += f"message: {e}, "
         admin_db.backup_log(
             c_id,
             Name,
@@ -503,7 +500,7 @@ def pg_backup(info, backup_type="User", c_id=None):
             command=pg_dumpall_cmd,
             err_msg=f"{backup_util.BACKUP_FAILED}: psycopg connect: {e}",
         )
-        return message
+        return error_message
 
     cur = connection.cursor()
     select = "SELECT datname FROM pg_database WHERE datname "
@@ -512,7 +509,6 @@ def pg_backup(info, backup_type="User", c_id=None):
     dbs = cur.fetchall()
     connection.close()
 
-    message += f"\nBacking up {len(dbs)} database(s):\n"
     # Back up each database
     pg_dump_cmd = ""
     err_msg = ""
@@ -533,12 +529,12 @@ def pg_backup(info, backup_type="User", c_id=None):
         success, msg = backup_util.s3_piped_backup(pg_dump_cmd, s3_dump_url, env=env)
 
         if not success:
-            message += f"\nDatabase: {dbname}\n"
+            message += f"Database: {dbname}\n"
             message += f"Error: {msg}\n"
             if not err_msg:
                 err_msg = backup_util.backup_err_msg(False, msg, context=dbname)
         else:
-            message += f"\nDatabase: {dbname} written to: {s3_dump_url}\n"
+            message += f"\n    Database: {dbname} written to: {s3_dump_url}\n"
 
     admin_db.backup_log(
         c_id,
@@ -665,7 +661,7 @@ def pg_audit(Info):
     report.append("=" * 80)
     report.append("Audit Complete")
     report.append("=" * 80)
-    if mydb_config.FLASK_DEBUG == "1":
+    if mydb_config.FLASK_DEBUG:
         print(report)
     return "\n".join(report)
 
@@ -716,7 +712,7 @@ def pg_restore(source, dest, S3_prefix, admin_conn=None, reset_users=False):
 
     result_msg = ""
     backup_files = aws_util.get_files_in_s3(S3_prefix)
-    if mydb_config.FLASK_DEBUG == "1":
+    if mydb_config.FLASK_DEBUG:
         print(f"DEBUG: pg_restore: {dest['dbname']} backup_files: {backup_files}")
     if len(backup_files) == 0:
         return "Could not find any files to restore PostgreSQL database."

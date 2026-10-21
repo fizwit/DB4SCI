@@ -35,7 +35,8 @@ def list_s3(Name, prefix):
     """
     cmd = ["aws", "s3", "ls", "--recursive",
            f"{mydb_config.AWS_BUCKET_NAME}/{prefix}/{Name}"]
-    print(f"DEBUG: {__file__} list_s3 cmd: {' '.join(cmd)}")
+    if mydb_config.FLASK_DEBUG:
+        print(f"DEBUG: {__file__} list_s3 cmd: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print(f"ERROR list_s3: aws s3 ls failed (exit {result.returncode}) "
@@ -91,8 +92,8 @@ def parse_s3_backup_list(Name, prefix):
         # Sort by date (newest first)
         backup_prefixes.sort(reverse=True)
 
-    print(f"DEBUG parse_s3_backup_list: Found {len(backup_prefixes)} backup prefixes for {Name}")
-    print(f"DEBUG parse_s3_backup_list: Prefixes: {backup_prefixes}")
+    # print(f"DEBUG parse_s3_backup_list: Found {len(backup_prefixes)} backup prefixes for {Name}")
+    # print(f"DEBUG parse_s3_backup_list: Prefixes: {backup_prefixes}")
 
     return backup_prefixes
 
@@ -106,7 +107,8 @@ def lastbackup_s3_prefix(Name, prefix):
     """
     s3_cmd = f"aws s3 ls {mydb_config.AWS_BUCKET_NAME}/{prefix}/{Name}/"
     command = s3_cmd.split()
-    print(f"DEBUG aws_util.lastbackup_s3_prefix: cmd = {command}")
+    if mydb_config.FLASK_DEBUG:
+        print(f"DEBUG {__file__}.lastbackup_s3_prefix: cmd = {command}")
 
     # Execute the command
     try:
