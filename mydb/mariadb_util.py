@@ -409,7 +409,7 @@ def backup(c_id, info, backup_type):
 
     # Use common S3 piped backup function
     # MariaDB doesn't need environment variables - password is in command
-    message = f"\nExecuting MariaDB backup to S3: {s3_url}\n"
+    message = f"MariaDB backup of {Name}\n"
 
     success, msg = backup_util.s3_piped_backup(command, s3_filename)
     if not success:

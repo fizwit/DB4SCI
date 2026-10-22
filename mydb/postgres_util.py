@@ -441,7 +441,7 @@ def pg_backup(info, backup_type="User", c_id=None):
 
     # Set PGPASSWORD environment variable for pg_dumpall
     env = {"PGPASSWORD": mydb_config.PG_ADMIN_PASS}
-    message = ""
+    message = f"Postgres backup of {Name}\n"
 
     # Log backup start
     admin_db.backup_log(
@@ -475,6 +475,8 @@ def pg_backup(info, backup_type="User", c_id=None):
             err_msg=backup_util.backup_err_msg(False, msg, context="globals"),
         )
         return error_message
+    else:
+        message += msg
 
     # Get list of user databases to be backed up.  psycopg works across server
     # versions, so this query still runs from DB4SCI over the network.
@@ -529,12 +531,12 @@ def pg_backup(info, backup_type="User", c_id=None):
         success, msg = backup_util.s3_piped_backup(pg_dump_cmd, s3_dump_url, env=env)
 
         if not success:
-            message += f"Database: {dbname}\n"
-            message += f"Error: {msg}\n"
+            err_msg += f"Database: {dbname}\n"
+            err_msg += f"Error: {msg}\n"
             if not err_msg:
                 err_msg = backup_util.backup_err_msg(False, msg, context=dbname)
         else:
-            message += f"\n    Database: {dbname} written to: {s3_dump_url}\n"
+            message += msg
 
     admin_db.backup_log(
         c_id,
@@ -546,7 +548,6 @@ def pg_backup(info, backup_type="User", c_id=None):
         command=pg_dump_cmd,
         err_msg=err_msg,
     )
-
     return message
 
 

@@ -452,7 +452,6 @@ def backup_all():
                 continue
             info["username"] = "cron"
             dbengine = info.get("dbengine")
-            msg += f"  - {info['Name']} {dbengine}\n"
             if dbengine == "Postgres":
                 msg += postgres_util.pg_backup(info, "Admin", c_id)
             elif dbengine == "MariaDB":
