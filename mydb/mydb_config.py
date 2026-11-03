@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE.parent / ".env", override=False)
-CONFIG_FILE = HERE / "mydb_config.yml"
+CONFIG_FILE = HERE / "config.yml"
 
 ENV_VARS = {
     "AWS_BUCKET_NAME": None,
