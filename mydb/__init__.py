@@ -30,6 +30,12 @@ if not app.secret_key or app.secret_key == "CHANGE_ME_TO_A_RANDOM_SECRET_KEY":
 # Session expires after N minutes of inactivity
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=120)
 
+# Site settings (config.yml + environment) available in every template
+# as {{ site.<name> }}, e.g. {{ site.supportEmail }}.
+from .mydb_config import config as site_config  # noqa: E402
+
+app.jinja_env.globals["site"] = site_config
+
 # Initialize admin databases
 from . import admin_db, migrate_db
 

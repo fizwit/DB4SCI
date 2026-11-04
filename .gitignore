@@ -6,11 +6,9 @@ nohup.out
 *.cert
 *.crt
 *.pem
-prod/nginx/mydb.conf
 .idea/*
 test/*
 requirements.docker-ce
-env_setup.sh
 Extras
 __pycache__/
 
@@ -33,5 +31,5 @@ TODO
 env
 dev_files/*
 *.sql
-mydb/mydb_config.yml
-mydb_config.yml
+mydb/config.yml
+config.yml
