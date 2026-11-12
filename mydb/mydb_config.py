@@ -64,6 +64,17 @@ def load_config(path=CONFIG_FILE):
 
 
 config = load_config()
+
+
+def __getattr__(name):
+    """Module-level fallback (PEP 562): mydb_config.X -> config.X, so callers
+    like admin_db's mydb_config.SQLALCHEMY_ADMIN_URI resolve."""
+    try:
+        return getattr(config, name)
+    except AttributeError:
+        raise AttributeError(f"mydb_config has no setting {name!r}") from None
+
+
 def default_image(dbengine):
     """Image the create form pre-selects: the first entry in ["V"]."""
     return getattr(config.dbs, dbengine).V[0].image
