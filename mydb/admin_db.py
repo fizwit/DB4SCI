@@ -81,7 +81,7 @@ def init_db():
             f"{err.orig if err.orig is not None else err}\n"
             "Starting without an initialized admin database. Verify the "
             "'mydb_admin_db' service is running and reachable, then restart.\n"
-            "Also verify the environment variable `PROD_URI` is correct"  
+            "Also verify the environment variable `PROD_URI` is correct"
         )
         sys.exit(1)
 
@@ -511,7 +511,7 @@ def display_active_containers():
             image,
             human,
         )
-        body += format_fill("left", row, widths)
+        body += format_fill("left", str(row), widths)
         counter += 1
     body += f"\nTotal Containers {counter}\n"
     return (header, body)

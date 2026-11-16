@@ -40,3 +40,6 @@ packages = ["mydb"]
 # DB4SCI-specific metadata (not part of the standard packaging schema)
 [tool.db4sci]
 release_date = "Oct, 2026"
+
+[tool.ruff]
+line-length = 100

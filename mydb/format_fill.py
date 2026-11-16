@@ -15,9 +15,10 @@ def format_fill(justify, row, widths):
     out = ''
     sum = 0
     actual = 0
-    for i, item in enumerate(row):
+    for i, col in enumerate(row):
        width = widths[i] if sum >= actual else widths[i] - (actual - sum)
        width = max(0, width)  # Ensure width is never negative
+       item = str(col)
        if justify == 'right':
            out += f"{item:>{width}} "
        elif justify == 'left':

@@ -3,7 +3,7 @@ import subprocess
 import time
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from . import mydb_config
 
@@ -36,11 +36,11 @@ def list_s3(Name, prefix):
            f"{mydb_config.AWS_BUCKET_NAME}/{prefix}/{Name}"]
     if mydb_config.FLASK_DEBUG:
         print(f"DEBUG: {__file__} list_s3 cmd: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if result.returncode != 0:
-        message = f"ERROR list_s3: aws s3 ls failed (exit {result.returncode}) "
-            f"for {mydb_config.AWS_BUCKET_NAME}/{prefix}/{Name}\n"
-            f"{result.stderr.strip()}"
+        message = (f"ERROR list_s3: aws s3 ls failed (exit {result.returncode}) "
+                   f"for {mydb_config.AWS_BUCKET_NAME}/{prefix}/{Name}\n"
+                   f"{result.stderr.strip()}")
     else:
         message = result.stdout.strip()
     return message
@@ -192,8 +192,8 @@ def list_s3_files(s3_url):
     except ClientError as e:
         print(f"Error accessing S3 bucket: {e}")
         return []
-    except Exception as e:
-        print(f"Unexpected error: {e}")
+    except BotoCoreError as e:
+        print(f"BotoCore error: {e}")
         return []
 
 
@@ -234,8 +234,8 @@ def save_s3_obj(s3_url, filename):
             return (False, f"S3 object not found: {s3_url}")
         else:
             return (False, f"S3 error downloading {s3_url}: {e}")
-    except Exception as e:
-        return (False, f"Unexpected error downloading {s3_url}: {e}")
+    except BotoCoreError as e:
+        return (False, f"BotoCoreError error downloading {s3_url}: {e}")
 
 
 def get_files_in_s3(prefix):
@@ -259,8 +259,8 @@ def get_files_in_s3(prefix):
     except ClientError as e:
         print(f"Error accessing S3 bucket: {e}")
         return []
-    except Exception as e:
-        print(f"Unexpected error: {e}")
+    except BotoCoreError as e:
+        print(f"{__name__}: BotoCoreError Unexpected error: {e}")
         return []
 
 
@@ -290,7 +290,6 @@ def setup_parser():
 def main():
     args = setup_parser()
     bucket_name = os.getenv("AWS_BUCKET_NAME")
-    boto_bucket = bucket_name.replace("s3://", "").rstrip("/")
 
     if args.last_backup:
         print(f"Testing lastbackup_s3_prefix, name: {args.last_backup}")

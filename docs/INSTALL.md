@@ -25,6 +25,8 @@ Verify Swarm is running:
 ```bash
 docker node ls
 ```
+#### Swarm Storage
+
 
 ### Network Configuration
 
